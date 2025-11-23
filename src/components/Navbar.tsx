@@ -39,7 +39,8 @@ const Navbar = () => {
             </Link>
             <Link to="/signup">
               <Button className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white glow-primary">
-                Sign In
+                Sign Up
+        
               </Button>
             </Link>
           </div>

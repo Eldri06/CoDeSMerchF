@@ -40,14 +40,16 @@ const Hero = () => {
                   <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="border-border/50 hover:border-primary hover:text-primary group text-lg px-8"
-              >
-                Learn More
-                <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" size={16} />
-              </Button>
+              <a href="#features">
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  className="border-border/50 hover:border-primary hover:text-primary group text-lg px-8"
+                >
+                  Learn More
+                  <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" size={16} />
+                </Button>
+              </a>
             </div>
           </div>
 

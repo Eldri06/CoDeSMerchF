@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, Lock, Mail, User, Building2, ChartBar, Zap, DollarSign } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -17,6 +17,12 @@ import codesLogo from "@/assets/codes-logo.png";
 const Signup = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate("/dashboard");
+  };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
@@ -72,7 +78,7 @@ const Signup = () => {
             <p className="text-muted-foreground">Create your account to manage CoDeS merchandise</p>
           </div>
 
-          <form className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Full Name */}
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>

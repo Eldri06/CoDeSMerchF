@@ -2,6 +2,18 @@ import { useState } from "react";
 import DashboardSidebar from "@/components/dashboard/DashboardSidebar";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import DashboardHome from "@/components/dashboard/DashboardHome";
+import POS from "./dashboard/POS";
+import Products from "./dashboard/Products";
+import StockManagement from "./dashboard/StockManagement";
+import Events from "./dashboard/Events";
+import Transactions from "./dashboard/Transactions";
+import Revenue from "./dashboard/Revenue";
+import SalesAnalytics from "./dashboard/SalesAnalytics";
+import EventComparison from "./dashboard/EventComparison";
+import Forecasting from "./dashboard/Forecasting";
+import Reports from "./dashboard/Reports";
+import Team from "./dashboard/Team";
+import Settings from "./dashboard/Settings";
 
 const Dashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
@@ -21,9 +33,18 @@ const Dashboard = () => {
         
         <main className="flex-1 overflow-y-auto p-6">
           {activeSection === "dashboard" && <DashboardHome />}
-          {activeSection === "pos" && <div className="text-muted-foreground">POS Module - Coming Soon</div>}
-          {activeSection === "inventory" && <div className="text-muted-foreground">Inventory Module - Coming Soon</div>}
-          {/* Add other sections as needed */}
+          {activeSection === "pos" && <POS />}
+          {activeSection === "products" && <Products />}
+          {activeSection === "stock" && <StockManagement />}
+          {activeSection === "events" && <Events />}
+          {activeSection === "transactions" && <Transactions />}
+          {activeSection === "revenue" && <Revenue />}
+          {activeSection === "sales-analytics" && <SalesAnalytics />}
+          {activeSection === "comparison" && <EventComparison />}
+          {activeSection === "forecasting" && <Forecasting />}
+          {activeSection === "reports" && <Reports />}
+          {activeSection === "team" && <Team />}
+          {activeSection === "settings" && <Settings />}
         </main>
       </div>
     </div>

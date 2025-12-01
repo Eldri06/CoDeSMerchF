@@ -1,4 +1,4 @@
-import { Home, ShoppingCart, Package, Warehouse, Grid, Truck, Calendar, Receipt, DollarSign, BarChart, TrendingUp, GitCompare, Brain, Zap, FileText, Users, Settings, ChevronLeft, ChevronRight } from "lucide-react";
+import { Home, ShoppingCart, Package, Warehouse, Calendar, Receipt, DollarSign, BarChart, GitCompare, Brain, FileText, Users, Settings, ChevronLeft, ChevronRight } from "lucide-react";
 import codesLogo from "@/assets/codes-logo.png";
 
 interface DashboardSidebarProps {
@@ -22,8 +22,6 @@ const DashboardSidebar = ({ activeSection, setActiveSection, collapsed, setColla
       items: [
         { id: "products", icon: Package, label: "Products" },
         { id: "stock", icon: Warehouse, label: "Stock Management" },
-        { id: "categories", icon: Grid, label: "Categories" },
-        { id: "suppliers", icon: Truck, label: "Suppliers" },
       ]
     },
     {
@@ -38,7 +36,6 @@ const DashboardSidebar = ({ activeSection, setActiveSection, collapsed, setColla
       section: "Analytics",
       items: [
         { id: "sales-analytics", icon: BarChart, label: "Sales Analytics" },
-        { id: "performance", icon: TrendingUp, label: "Performance" },
         { id: "comparison", icon: GitCompare, label: "Event Comparison" },
       ]
     },
@@ -46,7 +43,6 @@ const DashboardSidebar = ({ activeSection, setActiveSection, collapsed, setColla
       section: "AI & Automation",
       items: [
         { id: "forecasting", icon: Brain, label: "AI Forecasting", badge: "New" },
-        { id: "insights", icon: Zap, label: "Insights" },
       ]
     },
     {

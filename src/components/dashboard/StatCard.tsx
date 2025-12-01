@@ -1,4 +1,3 @@
-
 import { Card } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, LucideIcon } from "lucide-react";
 

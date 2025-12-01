@@ -1,4 +1,4 @@
-import { Bell, Search, ChevronDown, Zap } from "lucide-react";
+import { Bell, Search, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const DashboardHeader = () => {
@@ -23,11 +23,6 @@ const DashboardHeader = () => {
           <span className="text-sm font-medium">Intramurals 2025</span>
           <span className="px-2 py-0.5 rounded-full bg-accent/20 text-accent text-xs font-medium">Live</span>
           <ChevronDown size={16} />
-        </Button>
-
-        {/* Quick Actions */}
-        <Button variant="ghost" size="icon" className="relative" title="Quick Actions">
-          <Zap size={20} />
         </Button>
 
         {/* Notifications */}

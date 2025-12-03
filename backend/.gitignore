@@ -1,0 +1,27 @@
+# Environment variables - NEVER COMMIT
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+
+# Firebase service account keys - NEVER COMMIT
+*firebase*adminsdk*.json
+firebase-adminsdk-*.json
+serviceAccountKey.json
+*firebase*.json
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store

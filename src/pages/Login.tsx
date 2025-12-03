@@ -6,18 +6,77 @@ import { Eye, EyeOff, Lock, Mail, ChartBar, Zap, DollarSign } from "lucide-react
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import codesLogo from "@/assets/codes-logo.png";
+import { authService } from "@/services/authService";
+import { toast } from "sonner";
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    rememberMe: false,
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.id]: e.target.value,
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/dashboard");
+
+    if (!formData.email || !formData.password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await authService.login(formData.email, formData.password);
+
+      if (result.success) {
+        toast.success(result.message);
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 1500);
+      } else {
+        toast.error(result.message);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error("An unexpected error occurred");
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
+    <div className="min-h-screen grid lg:grid-cols-2 relative">
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-background/95 backdrop-blur-md z-50 flex items-center justify-center">
+          <div className="text-center space-y-6">
+            <div className="relative w-32 h-32 mx-auto">
+              <img
+                src={codesLogo}
+                alt="CoDeS Logo"
+                className="w-full h-full object-contain animate-pulse"
+              />
+              <div className="absolute inset-0 border-4 border-primary/30 rounded-full animate-spin border-t-primary"></div>
+            </div>
+            <p className="text-xl font-semibold text-primary animate-pulse">
+              Signing you in...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Left Side - Branding */}
       <div className="hidden lg:flex flex-col justify-center p-12 bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(at_50%_50%,hsl(217_91%_60%/0.3)_0,transparent_50%)]" />
@@ -81,6 +140,10 @@ const Login = () => {
                   type="email"
                   placeholder="you@umtc.edu.ph"
                   className="pl-10 glass-card border-border/50 focus:border-primary"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  required
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -95,11 +158,16 @@ const Login = () => {
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   className="pl-10 pr-10 glass-card border-border/50 focus:border-primary"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  required
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -109,7 +177,12 @@ const Login = () => {
             {/* Remember Me & Forgot Password */}
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Checkbox id="remember" />
+                <Checkbox 
+                  id="remember" 
+                  checked={formData.rememberMe}
+                  onCheckedChange={(checked) => setFormData({ ...formData, rememberMe: checked as boolean })}
+                  disabled={isLoading}
+                />
                 <label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
                   Remember me
                 </label>
@@ -124,8 +197,9 @@ const Login = () => {
               type="submit"
               className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white glow-primary"
               size="lg"
+              disabled={isLoading}
             >
-              Sign In
+              {isLoading ? "Signing in..." : "Sign In"}
             </Button>
 
             {/* Sign Up Link */}

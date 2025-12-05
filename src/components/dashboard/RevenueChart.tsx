@@ -17,21 +17,21 @@ const data = [
 
 const RevenueChart = () => {
   return (
-    <Card className="p-6 glass-card border-border/50">
-      <div className="flex items-center justify-between mb-6">
+    <Card className="p-4 md:p-6 glass-card border-border/50">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6">
         <div>
-          <h3 className="text-lg font-semibold mb-1">Revenue Trend</h3>
-          <p className="text-sm text-muted-foreground">Last 30 days performance</p>
+          <h3 className="text-base md:text-lg font-semibold mb-0.5 md:mb-1">Revenue Trend</h3>
+          <p className="text-xs md:text-sm text-muted-foreground">Last 30 days performance</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="text-xs">7D</Button>
-          <Button variant="default" size="sm" className="text-xs">30D</Button>
-          <Button variant="outline" size="sm" className="text-xs">3M</Button>
-          <Button variant="outline" size="sm" className="text-xs">1Y</Button>
+        <div className="flex gap-1.5 md:gap-2">
+          <Button variant="outline" size="sm" className="text-xs h-7 px-2 md:h-8 md:px-3">7D</Button>
+          <Button variant="default" size="sm" className="text-xs h-7 px-2 md:h-8 md:px-3">30D</Button>
+          <Button variant="outline" size="sm" className="text-xs h-7 px-2 md:h-8 md:px-3">3M</Button>
+          <Button variant="outline" size="sm" className="text-xs h-7 px-2 md:h-8 md:px-3">1Y</Button>
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={250}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -41,15 +41,16 @@ const RevenueChart = () => {
           </defs>
           <XAxis 
             dataKey="date" 
-            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
             axisLine={false}
             tickLine={false}
           />
           <YAxis 
-            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(value) => `₱${value / 1000}k`}
+            width={40}
           />
           <Tooltip 
             contentStyle={{

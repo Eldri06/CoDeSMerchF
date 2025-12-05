@@ -31,7 +31,7 @@ const Dashboard = () => {
       <div className="flex-1 flex flex-col overflow-hidden">
         <DashboardHeader />
         
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-3 md:p-6 pt-16 md:pt-6">
           {activeSection === "dashboard" && <DashboardHome />}
           {activeSection === "pos" && <POS />}
           {activeSection === "products" && <Products />}

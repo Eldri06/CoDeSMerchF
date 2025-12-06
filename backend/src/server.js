@@ -7,8 +7,14 @@ require('./config/firebase');
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// FIXED CORS - Must be BEFORE other middleware
+app.use(cors({
+  origin: '*',  // Allow all origins for now
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // Test route - ROOT
@@ -47,4 +53,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📡 API available at http://localhost:${PORT}/api`);
   console.log(`🔥 Test it: http://localhost:${PORT}/api`);
+  console.log(`✅ CORS enabled for all origins`);
 });

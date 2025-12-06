@@ -57,7 +57,7 @@ const Signup = () => {
       return;
     }
 
-    if (!formData.email.endsWith("@umtc.edu.ph")) {
+    if (!formData.email.endsWith("@umindanao.edu.ph")) {
       toast.error("Please use your UMTC email address");
       return;
     }
@@ -72,10 +72,7 @@ const Signup = () => {
       return;
     }
 
-    if (!agreedToTerms) {
-      toast.error("Please agree to the terms and conditions");
-      return;
-    }
+    
 
     setLoading(true);
 
@@ -170,7 +167,7 @@ const Signup = () => {
                 <Input
                   id="fullName"
                   type="text"
-                  placeholder="Juan Dela Cruz"
+                  placeholder="Genrhey Barba"
                   className="pl-10 glass-card border-border/50 focus:border-primary"
                   value={formData.fullName}
                   onChange={handleInputChange}
@@ -187,7 +184,7 @@ const Signup = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="yourname@umtc.edu.ph"
+                  placeholder="yourname@umindanao.edu.ph"
                   className="pl-10 glass-card border-border/50 focus:border-primary"
                   value={formData.email}
                   onChange={handleInputChange}
@@ -260,7 +257,7 @@ const Signup = () => {
                   <SelectItem value="pio">PIO</SelectItem>
                   <SelectItem value="business">Business Manager</SelectItem>
                   <SelectItem value="officer">Officer</SelectItem>
-                  <SelectItem value="member">Member</SelectItem>
+                  
                 </SelectContent>
               </Select>
             </div>
@@ -271,7 +268,7 @@ const Signup = () => {
               <Input
                 id="studentId"
                 type="text"
-                placeholder="2021-XXXX"
+                placeholder="123456"
                 className="glass-card border-border/50 focus:border-primary"
                 value={formData.studentId}
                 onChange={handleInputChange}
@@ -293,24 +290,7 @@ const Signup = () => {
             </div>
 
             {/* Terms & Conditions */}
-            <div className="flex items-start space-x-2">
-              <Checkbox 
-                id="terms" 
-                className="mt-1" 
-                checked={agreedToTerms}
-                onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
-              />
-              <label htmlFor="terms" className="text-sm text-muted-foreground cursor-pointer leading-relaxed">
-                I agree to the{" "}
-                <a href="#" className="text-primary hover:underline">
-                  Terms of Service
-                </a>{" "}
-                and{" "}
-                <a href="#" className="text-primary hover:underline">
-                  Privacy Policy
-                </a>
-              </label>
-            </div>
+            
 
             {/* Create Account Button */}
             <Button

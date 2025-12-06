@@ -138,7 +138,7 @@ const Login = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@umtc.edu.ph"
+                  placeholder="you@umindanao.edu.ph"
                   className="pl-10 glass-card border-border/50 focus:border-primary"
                   value={formData.email}
                   onChange={handleInputChange}

@@ -98,3 +98,11 @@ All colors MUST be HSL
     box-shadow: var(--shadow-glow);
   }
 }
+
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 12px; }
+  .print-area img { filter: none; }
+  .print-area .border-t { border-top: 1px solid hsl(var(--border)); }
+}

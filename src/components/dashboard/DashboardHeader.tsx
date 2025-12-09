@@ -1,7 +1,10 @@
 import { Bell, Search, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useEventContext } from "@/context/EventContext";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const DashboardHeader = () => {
+  const { currentEventName, currentEventId, events, setEvent, refreshEvents } = useEventContext();
   return (
     <header className="h-14 md:h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-3 md:px-6 z-10">
       {/* Search Bar */}
@@ -19,11 +22,28 @@ const DashboardHeader = () => {
       {/* Right Section */}
       <div className="flex items-center gap-1 md:gap-3">
         {/* Event Selector - Hidden on mobile */}
-        <Button variant="outline" className="hidden sm:flex gap-2 border-border/50 hover:border-primary">
-          <span className="text-sm font-medium">Intramurals 2025</span>
-          <span className="px-2 py-0.5 rounded-full bg-accent/20 text-accent text-xs font-medium">Live</span>
-          <ChevronDown size={16} />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="hidden sm:flex gap-2 border-border/50 hover:border-primary">
+              <span className="text-sm font-medium">{currentEventName}</span>
+              <ChevronDown size={16} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>Switch Event</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setEvent(null)}>
+              All Events
+            </DropdownMenuItem>
+            {events.map((e) => (
+              <DropdownMenuItem key={e.id} onClick={() => setEvent(e.id!)}>
+                {e.name} {currentEventId === e.id ? "✓" : ""}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={refreshEvents}>Refresh</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative h-9 w-9" title="Notifications">

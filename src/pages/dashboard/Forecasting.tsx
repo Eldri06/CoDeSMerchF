@@ -7,6 +7,47 @@ import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from "recharts";
 
+const TrendChartContent = ({ data }: { data: Array<{ event: string; actual: number | null; predicted: number }> }) => (
+  <Card className="p-4 md:p-6">
+    <h2 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
+      <TrendingUp size={20} />
+      Sales Trend Analysis
+    </h2>
+    <ResponsiveContainer width="100%" height={250}>
+      <AreaChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+        <XAxis dataKey="event" stroke="hsl(var(--muted-foreground))" fontSize={10} />
+        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
+        <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+        <Legend />
+        <Area type="monotone" dataKey="actual" stroke="hsl(var(--primary))" fill="hsl(var(--primary)/0.2)" name="Actual Sales" />
+        <Line type="linear" dataKey="predicted" stroke="hsl(var(--success))" strokeWidth={2} name="Trend Line" />
+      </AreaChart>
+    </ResponsiveContainer>
+    <p className="text-xs text-muted-foreground mt-3 text-center">
+      Historical sales data with linear regression trend line
+    </p>
+  </Card>
+);
+
+const ErrorChartContent = ({ data }: { data: Array<{ error: number; frequency: number }> }) => (
+  <Card className="p-4 md:p-6">
+    <h2 className="text-lg md:text-xl font-bold mb-4">Prediction Error Distribution</h2>
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+        <XAxis dataKey="error" stroke="hsl(var(--muted-foreground))" fontSize={10} />
+        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
+        <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+        <Bar dataKey="frequency" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+    <p className="text-xs text-muted-foreground mt-3 text-center">
+      Most predictions are within ±10 units of actual sales
+    </p>
+  </Card>
+);
+
 const Forecasting = () => {
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showErrorChart, setShowErrorChart] = useState(false);
@@ -46,46 +87,7 @@ const Forecasting = () => {
     { event: "Tech Week 2024", actual: 95, predicted: 88, accuracy: "92.6%" },
   ];
 
-  const TrendChartContent = () => (
-    <Card className="p-4 md:p-6">
-      <h2 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
-        <TrendingUp size={20} />
-        Sales Trend Analysis
-      </h2>
-      <ResponsiveContainer width="100%" height={250}>
-        <AreaChart data={historicalTrend}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis dataKey="event" stroke="hsl(var(--muted-foreground))" fontSize={10} />
-          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
-          <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-          <Legend />
-          <Area type="monotone" dataKey="actual" stroke="hsl(var(--primary))" fill="hsl(var(--primary)/0.2)" name="Actual Sales" />
-          <Line type="linear" dataKey="predicted" stroke="hsl(var(--success))" strokeWidth={2} name="Trend Line" />
-        </AreaChart>
-      </ResponsiveContainer>
-      <p className="text-xs text-muted-foreground mt-3 text-center">
-        Historical sales data with linear regression trend line
-      </p>
-    </Card>
-  );
 
-  const ErrorChartContent = () => (
-    <Card className="p-4 md:p-6">
-      <h2 className="text-lg md:text-xl font-bold mb-4">Prediction Error Distribution</h2>
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={errorDistribution}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis dataKey="error" stroke="hsl(var(--muted-foreground))" fontSize={10} />
-          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
-          <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-          <Bar dataKey="frequency" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-      <p className="text-xs text-muted-foreground mt-3 text-center">
-        Most predictions are within ±10 units of actual sales
-      </p>
-    </Card>
-  );
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -220,8 +222,8 @@ const Forecasting = () => {
 
       {/* Charts - Desktop: Always visible, Mobile: Collapsible */}
       <div className="hidden md:block space-y-6">
-        <TrendChartContent />
-        <ErrorChartContent />
+        <TrendChartContent data={historicalTrend} />
+        <ErrorChartContent data={errorDistribution} />
       </div>
 
       {/* Mobile Chart Toggles */}
@@ -237,7 +239,7 @@ const Forecasting = () => {
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-3">
-            <TrendChartContent />
+            <TrendChartContent data={historicalTrend} />
           </CollapsibleContent>
         </Collapsible>
 
@@ -252,7 +254,7 @@ const Forecasting = () => {
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-3">
-            <ErrorChartContent />
+            <ErrorChartContent data={errorDistribution} />
           </CollapsibleContent>
         </Collapsible>
       </div>

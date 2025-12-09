@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DollarSign, TrendingUp, PieChart, ChevronDown, ChevronUp, LineChart as LineChartIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useEventContext } from "@/context/EventContext";
+import { Transaction } from "@/services/transactionService";
+import { database } from "@/config/firebase";
+import { onValue, ref } from "firebase/database";
 import {
   LineChart,
   Line,
@@ -19,24 +23,48 @@ import {
 } from "recharts";
 
 const Revenue = () => {
+  const { currentEventId, currentEventName } = useEventContext();
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showPaymentChart, setShowPaymentChart] = useState(false);
+  const [txns, setTxns] = useState<Transaction[]>([]);
 
-  const revenueData = [
-    { day: "Day 1", revenue: 12000, profit: 4800 },
-    { day: "Day 2", revenue: 15000, profit: 6000 },
-    { day: "Day 3", revenue: 18230, profit: 7292 },
-  ];
+  useEffect(() => {
+    const r = ref(database, "transactions");
+    const unsub = onValue(r, (snap) => {
+      const obj = snap.exists() ? (snap.val() as Record<string, Transaction>) : {};
+      const list: Transaction[] = Object.entries(obj).map(([id, t]) => ({ ...t, id }));
+      const filtered = currentEventId ? list.filter((t) => (t.eventId ?? null) === currentEventId) : list;
+      setTxns(filtered);
+    });
+    return () => unsub();
+  }, [currentEventId]);
 
-  const paymentData = [
-    { name: "Cash", value: 29400, percentage: 65 },
-    { name: "GCash", value: 13569, percentage: 30 },
-    { name: "Other", value: 2261, percentage: 5 },
-  ];
+  const totalRevenue = useMemo(() => txns.reduce((sum, t) => sum + Number(t.total || 0), 0), [txns]);
+  type PaymentSlice = { name: string; value: number; percentage: number };
+  const paymentData: PaymentSlice[] = useMemo(() => {
+    const totals: Record<string, number> = {};
+    txns.forEach((t) => {
+      const key = (t.paymentMethod || "cash").toLowerCase();
+      totals[key] = (totals[key] || 0) + Number(t.total || 0);
+    });
+    const entries = Object.entries(totals).map(([name, value]) => ({ name: name === "gcash" ? "GCash" : name === "cash" ? "Cash" : name, value }));
+    const sum = entries.reduce((s, e) => s + e.value, 0) || 1;
+    return entries.map((e) => ({ ...e, percentage: Math.round((e.value / sum) * 100) }));
+  }, [txns]);
+
+  const revenueData = useMemo(() => {
+    const byDay: Record<string, number> = {};
+    txns.forEach((t) => {
+      const d = t.createdAt ? new Date(t.createdAt) : new Date();
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      byDay[key] = (byDay[key] || 0) + Number(t.total || 0);
+    });
+    return Object.entries(byDay).map(([day, revenue]) => ({ day, revenue }));
+  }, [txns]);
 
   const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--muted))"];
 
-  const TrendChartContent = () => (
+  const TrendChart = (
     <Card className="p-4 md:p-6">
       <h2 className="text-lg md:text-xl font-bold mb-4 md:mb-6">Revenue Trend</h2>
       <ResponsiveContainer width="100%" height={250}>
@@ -44,49 +72,25 @@ const Revenue = () => {
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
           <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={12} />
           <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-          <Tooltip 
-            contentStyle={{ 
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-              fontSize: "12px"
-            }}
-          />
+          <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
           <Legend />
           <Line type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" strokeWidth={2} name="Revenue" />
-          <Line type="monotone" dataKey="profit" stroke="hsl(var(--success))" strokeWidth={2} name="Profit" />
         </LineChart>
       </ResponsiveContainer>
     </Card>
   );
 
-  const PaymentChartContent = () => (
+  const PaymentChart = (
     <Card className="p-4 md:p-6">
       <h2 className="text-lg md:text-xl font-bold mb-4 md:mb-6">Payment Methods</h2>
       <ResponsiveContainer width="100%" height={250}>
         <RePieChart>
-          <Pie
-            data={paymentData}
-            cx="50%"
-            cy="50%"
-            labelLine={false}
-            label={(entry: any) => `${entry.name} ${entry.percentage}%`}
-            outerRadius={80}
-            fill="#8884d8"
-            dataKey="value"
-          >
+          <Pie data={paymentData} cx="50%" cy="50%" labelLine={false} label={(entry: PaymentSlice) => `${entry.name} ${entry.percentage}%`} outerRadius={80} fill="#8884d8" dataKey="value">
             {paymentData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>
-          <Tooltip 
-            contentStyle={{ 
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-              fontSize: "12px"
-            }}
-          />
+          <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
         </RePieChart>
       </ResponsiveContainer>
     </Card>
@@ -105,9 +109,9 @@ const Revenue = () => {
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-primary/10 flex items-center justify-center">
               <DollarSign className="text-primary" size={20} />
             </div>
-            <Badge className="text-xs">Intramurals 2025</Badge>
+            <Badge className="text-xs">{currentEventName}</Badge>
           </div>
-          <h3 className="text-xl md:text-2xl font-bold mb-1">₱45,230</h3>
+          <h3 className="text-xl md:text-2xl font-bold mb-1">₱{totalRevenue.toFixed(2)}</h3>
           <p className="text-xs md:text-sm text-muted-foreground mb-2">Total Sales</p>
           <div className="flex items-center gap-1 text-success text-xs md:text-sm">
             <TrendingUp size={14} />
@@ -141,10 +145,7 @@ const Revenue = () => {
       </div>
 
       {/* Desktop Charts */}
-      <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TrendChartContent />
-        <PaymentChartContent />
-      </div>
+      <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 gap-6">{TrendChart}{PaymentChart}</div>
 
       {/* Mobile Chart Toggles */}
       <div className="md:hidden space-y-3">
@@ -158,9 +159,7 @@ const Revenue = () => {
               {showTrendChart ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3 animate-accordion-down">
-            <TrendChartContent />
-          </CollapsibleContent>
+          <CollapsibleContent className="mt-3 animate-accordion-down">{TrendChart}</CollapsibleContent>
         </Collapsible>
 
         <Collapsible open={showPaymentChart} onOpenChange={setShowPaymentChart}>
@@ -173,9 +172,7 @@ const Revenue = () => {
               {showPaymentChart ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3 animate-accordion-down">
-            <PaymentChartContent />
-          </CollapsibleContent>
+          <CollapsibleContent className="mt-3 animate-accordion-down">{PaymentChart}</CollapsibleContent>
         </Collapsible>
       </div>
     </div>

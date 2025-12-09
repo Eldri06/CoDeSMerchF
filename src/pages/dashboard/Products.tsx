@@ -1,6 +1,6 @@
 // src/pages/dashboard/Products.tsx
 // FIXED: Add Product button now actually opens dialog
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Search, Filter, Plus, Package, Edit, Trash2, MoreVertical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,21 +39,34 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { productService, Product } from "@/services/productService";
+import { Transaction, TransactionItem } from "@/services/transactionService";
+import { database } from "@/config/firebase";
+import { onValue, ref } from "firebase/database";
+import { useEventContext } from "@/context/EventContext";
 
 const Products = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
   
-  // FIXED: Dialog state
+  const [loading, setLoading] = useState(true);
+  const [revenueByProduct, setRevenueByProduct] = useState<Record<string, number>>({});
+  const [itemsSoldByProduct, setItemsSoldByProduct] = useState<Record<string, number>>({});
+
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [editData, setEditData] = useState<Partial<Product>>({});
+  const [adjustQty, setAdjustQty] = useState<string>("0");
+  const [adjustMode, setAdjustMode] = useState<"add" | "set">("add");
   
   // Filter State
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const { currentEventId, currentEventName } = useEventContext();
 
   // Form Data
   const [formData, setFormData] = useState({
@@ -71,21 +84,16 @@ const Products = () => {
   const categories = ["Shirts", "Lanyards", "Keychains", "Stickers", "Mugs", "Others"];
 
   useEffect(() => {
-    loadProducts();
+    (async () => {
+      setLoading(true);
+      const data = await productService.getAllProducts();
+      setProducts(data);
+      setLoading(false);
+    })();
   }, []);
 
-  useEffect(() => {
-    applyFilters();
-  }, [products, selectedCategory, selectedStatus, searchQuery]);
-
-  const loadProducts = async () => {
-    setLoading(true);
-    const data = await productService.getAllProducts();
-    setProducts(data);
-    setLoading(false);
-  };
-
-  const applyFilters = () => {
+  const displayedProducts = useMemo(() => {
+    const norm = (v: string | null | undefined) => String(v || "").trim().toLowerCase();
     let filtered = [...products];
 
     if (selectedCategory !== "all") {
@@ -105,8 +113,57 @@ const Products = () => {
       );
     }
 
-    setFilteredProducts(filtered);
+    if (currentEventId) {
+      const cand = [norm(currentEventId), norm(currentEventName)];
+      const idOrNameMatches = (p: Product) => {
+        if ((p.eventId ?? null) && cand.includes(norm(p.eventId as string))) return true;
+        const keys = Object.keys(p.stockByEvent || {});
+        return keys.some((k) => cand.includes(norm(k)));
+      };
+      filtered = filtered.filter(idOrNameMatches).map((p) => {
+        const keys = Object.keys(p.stockByEvent || {});
+        const mk = keys.find((k) => cand.includes(norm(k)));
+        if (mk) return { ...p, stock: Number(p.stockByEvent?.[mk] ?? 0) } as Product;
+        if ((p.eventId ?? null) && cand.includes(norm(p.eventId as string))) return { ...p, stock: Number(p.stock ?? 0) } as Product;
+        return { ...p, stock: 0 } as Product;
+      });
+    }
+
+    return filtered;
+  }, [products, selectedCategory, selectedStatus, searchQuery, currentEventId, currentEventName]);
+
+  useEffect(() => {
+    const r = ref(database, "transactions");
+    const unsub = onValue(r, (snap) => {
+      const obj = snap.exists() ? (snap.val() as Record<string, Transaction>) : {};
+      const list: Transaction[] = Object.entries(obj).map(([id, t]) => ({ ...t, id }));
+      const filtered = currentEventId ? list.filter((t) => (t.eventId ?? null) === currentEventId) : list;
+      const rev: Record<string, number> = {};
+      const sold: Record<string, number> = {};
+      filtered.forEach((t) => {
+        const items: TransactionItem[] = Array.isArray(t.items) ? (t.items as TransactionItem[]) : [];
+        items.forEach((it: TransactionItem) => {
+          const pid = String(it.productId || "");
+          const qty = Number(it.quantity || 0);
+          const amt = Number(it.price || 0) * qty;
+          rev[pid] = (rev[pid] || 0) + amt;
+          sold[pid] = (sold[pid] || 0) + qty;
+        });
+      });
+      setRevenueByProduct(rev);
+      setItemsSoldByProduct(sold);
+    });
+    return () => unsub();
+  }, [currentEventId]);
+
+  const loadProducts = async () => {
+    setLoading(true);
+    const data = await productService.getAllProducts();
+    setProducts(data);
+    setLoading(false);
   };
+
+  
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -188,6 +245,7 @@ const Products = () => {
       stock: parseInt(formData.stock),
       reorderLevel: parseInt(formData.reorderLevel) || 10,
       maxStock: parseInt(formData.maxStock) || 100,
+      eventId: currentEventId ?? null,
       status: parseInt(formData.stock) > 0 ? "Active" as const : "Out of Stock" as const,
     };
 
@@ -263,6 +321,25 @@ const Products = () => {
               onChange={(e) => handleSearch(e.target.value)}
             />
           </div>
+          <Button 
+            variant="outline"
+            className="gap-2"
+            onClick={() => {
+              const headers = ["id","name","sku","category","price","stock","status","eventId","createdAt","updatedAt"];
+              const rows = displayedProducts.map(p => [p.id,p.name,p.sku,p.category,p.price,p.stock,p.status,p.eventId ?? "",p.createdAt ?? "",p.updatedAt ?? ""]);
+              const csv = [headers.join(","), ...rows.map(r => r.map((v) => String(v).replace(/,/g, " ")).join(","))].join("\n");
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `products_${Date.now()}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            type="button"
+          >
+            Export CSV
+          </Button>
           <div className="relative">
             <Button 
               variant="outline" 
@@ -374,7 +451,7 @@ const Products = () => {
 
         {loading ? (
           <div className="text-center py-8">Loading products...</div>
-        ) : filteredProducts.length === 0 ? (
+        ) : displayedProducts.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             {products.length === 0 ? (
               <>No products found. Click "Add Product" to create one.</>
@@ -390,13 +467,14 @@ const Products = () => {
                 <TableHead>Category</TableHead>
                 <TableHead>Stock</TableHead>
                 <TableHead>Price</TableHead>
+                <TableHead>Items Sold</TableHead>
                 <TableHead>Revenue</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((product) => (
+              {displayedProducts.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -423,7 +501,8 @@ const Products = () => {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">₱{product.price.toLocaleString()}</TableCell>
-                  <TableCell>₱{((product.price - (product.cost || 0)) * product.stock).toLocaleString()}</TableCell>
+                  <TableCell>{Number(itemsSoldByProduct[product.id || ""] || 0)}</TableCell>
+                  <TableCell>₱{Number(revenueByProduct[product.id || ""] || 0).toLocaleString()}</TableCell>
                   <TableCell>
                     <Badge variant={product.status === "Active" ? "default" : "destructive"}>
                       {product.status}
@@ -436,13 +515,13 @@ const Products = () => {
                           <MoreVertical size={16} />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => { setSelectedProduct(product); setEditData({ name: product.name, sku: product.sku, category: product.category, price: product.price, cost: product.cost, reorderLevel: product.reorderLevel, maxStock: product.maxStock, status: product.status }); setIsEditOpen(true); }}>
                           <Edit size={16} className="mr-2" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                        <DropdownMenuItem>Adjust Stock</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setSelectedProduct(product); setIsDetailsOpen(true); }}>View Details</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setSelectedProduct(product); setAdjustQty("0"); setAdjustMode("add"); setIsAdjustOpen(true); }}>Adjust Stock</DropdownMenuItem>
                         <DropdownMenuItem 
                           className="text-destructive"
                           onClick={() => handleDeleteProduct(product.id!, product.name)}
@@ -609,6 +688,143 @@ const Products = () => {
             <Button onClick={handleAddProduct} disabled={isSubmitting} type="button">
               {isSubmitting ? "Creating..." : "Create Product"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input value={String(editData.name || "")} onChange={(e) => setEditData((prev) => ({ ...prev, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>SKU</Label>
+              <Input value={String(editData.sku || "")} onChange={(e) => setEditData((prev) => ({ ...prev, sku: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={String(editData.category || "")} onValueChange={(v) => setEditData((prev) => ({ ...prev, category: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label>Price</Label>
+                <Input type="number" min={0} step={0.01} value={String(editData.price ?? "")} onChange={(e) => setEditData((prev) => ({ ...prev, price: Number(e.target.value || 0) }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Cost</Label>
+                <Input type="number" min={0} step={0.01} value={String(editData.cost ?? "")} onChange={(e) => setEditData((prev) => ({ ...prev, cost: Number(e.target.value || 0) }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label>Reorder Level</Label>
+                <Input type="number" min={0} value={String(editData.reorderLevel ?? "")} onChange={(e) => setEditData((prev) => ({ ...prev, reorderLevel: Number(e.target.value || 0) }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Max Stock</Label>
+                <Input type="number" min={0} value={String(editData.maxStock ?? "")} onChange={(e) => setEditData((prev) => ({ ...prev, maxStock: Number(e.target.value || 0) }))} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={String(editData.status || "Active")} onValueChange={(v) => setEditData((prev) => ({ ...prev, status: v as Product["status"] }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Out of Stock">Out of Stock</SelectItem>
+                  <SelectItem value="Inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!selectedProduct?.id) return;
+              const res = await productService.updateProduct(selectedProduct.id, editData);
+              if (res.success) { setIsEditOpen(false); setSelectedProduct(null); await loadProducts(); }
+            }}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Product Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span>Name</span><span className="font-medium">{selectedProduct?.name}</span></div>
+            <div className="flex justify-between"><span>SKU</span><span className="font-medium">{selectedProduct?.sku}</span></div>
+            <div className="flex justify-between"><span>Category</span><span className="font-medium">{selectedProduct?.category}</span></div>
+            <div className="flex justify-between"><span>Price</span><span className="font-medium">₱{Number(selectedProduct?.price || 0).toFixed(2)}</span></div>
+            <div className="flex justify-between"><span>Stock</span><span className="font-medium">{Number(selectedProduct?.stock || 0)}</span></div>
+            <div className="flex justify-between"><span>Status</span><span className="font-medium">{selectedProduct?.status}</span></div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsDetailsOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Adjust Stock</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm font-medium">{selectedProduct?.name}</p>
+            <div className="text-xs text-muted-foreground">Current: {Number(selectedProduct?.stock ?? 0)}</div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant={adjustMode === "add" ? "default" : "outline"} onClick={() => setAdjustMode("add")}>Add</Button>
+              <Button variant={adjustMode === "set" ? "default" : "outline"} onClick={() => setAdjustMode("set")}>Set</Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => { const n = Math.max(0, (parseInt(adjustQty || "0", 10) || 0) - 1); setAdjustQty(String(n)); }}>-</Button>
+              <Input type="number" min={0} value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
+              <Button variant="outline" size="icon" onClick={() => { const n = (parseInt(adjustQty || "0", 10) || 0) + 1; setAdjustQty(String(n)); }}>+</Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAdjustOpen(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!selectedProduct?.id) return;
+              const base = Number(selectedProduct.stock ?? 0);
+              const qty = Math.max(0, Math.floor(Number(adjustQty || 0)));
+              if (qty < 0) { setIsAdjustOpen(false); return; }
+              if (currentEventId) {
+                if (adjustMode === "add") {
+                  await productService.updateEventStock(selectedProduct.id, currentEventId, qty);
+                } else {
+                  const delta = qty - base;
+                  await productService.updateEventStock(selectedProduct.id, currentEventId, delta);
+                }
+              } else {
+                if (adjustMode === "add") {
+                  const next = base + qty;
+                  await productService.updateStock(selectedProduct.id, next);
+                } else {
+                  await productService.updateStock(selectedProduct.id, qty);
+                }
+              }
+              setIsAdjustOpen(false);
+              setSelectedProduct(null);
+              await loadProducts();
+            }}>Confirm</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

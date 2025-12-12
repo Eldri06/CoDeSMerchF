@@ -99,6 +99,14 @@ const Products = () => {
     })();
   }, []);
 
+  useEffect(() => {
+    const preset = localStorage.getItem("productSearch") || "";
+    if (preset) {
+      setSearchQuery(preset);
+      localStorage.removeItem("productSearch");
+    }
+  }, []);
+
   const displayedProducts = useMemo(() => {
     const norm = (v: string | null | undefined) => String(v || "").trim().toLowerCase();
     let filtered = [...products];
@@ -214,13 +222,13 @@ const Products = () => {
         await fetch(`${import.meta.env.VITE_API_URL}/storage/ensure-bucket`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bucketName: 'product-images', public: true }),
+          body: JSON.stringify({ bucketName: 'product_images', public: true }),
         });
       } catch { void 0; }
       const safeSku = (formData.sku || "product").replace(/[^a-zA-Z0-9-_]/g, "_");
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
       const path = `products/${safeSku}-${Date.now()}.${ext}`;
-      const bucket = "product-images";
+      const bucket = "product_images";
       const fd = new FormData();
       fd.append('file', file);
       fd.append('bucket', bucket);
@@ -256,13 +264,13 @@ const Products = () => {
     try {
       try {
         await fetch(`${import.meta.env.VITE_API_URL}/storage/ensure-bucket`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bucketName: 'product-images', public: true })
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bucketName: 'product_images', public: true })
         });
       } catch { void 0; }
       const safeSku = (String(editData.sku || selectedProduct?.sku || 'product')).replace(/[^a-zA-Z0-9-_]/g, '_');
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `products/${safeSku}-${Date.now()}.${ext}`;
-      const bucket = 'product-images';
+      const bucket = 'product_images';
       const fd = new FormData();
       fd.append('file', file);
       fd.append('bucket', bucket);

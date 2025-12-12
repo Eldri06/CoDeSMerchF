@@ -13,10 +13,26 @@ import Forecasting from "./dashboard/Forecasting";
 import Reports from "./dashboard/Reports";
 import Team from "./dashboard/Team";
 import Settings from "./dashboard/Settings";
+import { useEffect } from "react";
 
 const Dashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      const section = String(detail.section || "");
+      if (section) {
+        setActiveSection(section);
+        if (detail.productSearch) {
+          localStorage.setItem("productSearch", String(detail.productSearch));
+        }
+      }
+    };
+    window.addEventListener("dashboard:navigate", handler as EventListener);
+    return () => window.removeEventListener("dashboard:navigate", handler as EventListener);
+  }, []);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">

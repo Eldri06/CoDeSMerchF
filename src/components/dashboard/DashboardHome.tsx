@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import StatCard from "@/components/dashboard/StatCard";
 import RevenueChart from "@/components/dashboard/RevenueChart";
 import TopProducts from "@/components/dashboard/TopProducts";
@@ -7,9 +7,46 @@ import LowStockAlerts from "@/components/dashboard/LowStockAlerts";
 import { DollarSign, ShoppingBag, Package, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useEventContext } from "@/context/EventContext";
+import { database } from "@/config/firebase";
+import { onValue, ref } from "firebase/database";
 
 const DashboardHome = () => {
   const [showChart, setShowChart] = useState(false);
+  const { currentEventId } = useEventContext();
+  const [products, setProducts] = useState<Array<{ id?: string; price?: number; cost?: number; stock?: number; reorderLevel?: number }>>([]);
+  const [txns, setTxns] = useState<Array<{ id?: string; total?: number; createdAt?: string; eventId?: string | null }>>([]);
+
+  useEffect(() => {
+    const r = ref(database, "products");
+    const unsub = onValue(r, (snap) => {
+      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
+      const list = Object.entries(obj).map(([id, p]) => ({ ...(p as any), id }));
+      setProducts(list);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const r = ref(database, "transactions");
+    const unsub = onValue(r, (snap) => {
+      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
+      const list = Object.entries(obj).map(([id, t]) => ({ ...(t as any), id }));
+      const filtered = currentEventId ? list.filter((t) => (t.eventId ?? null) === currentEventId) : list;
+      setTxns(filtered);
+    });
+    return () => unsub();
+  }, [currentEventId]);
+
+  const totalRevenue = useMemo(() => txns.reduce((sum, t) => sum + Number(t.total || 0), 0), [txns]);
+  const totalTransactions = useMemo(() => txns.length, [txns]);
+  const avgTransaction = useMemo(() => (totalTransactions ? totalRevenue / totalTransactions : 0), [totalRevenue, totalTransactions]);
+  const totalUnits = useMemo(() => products.reduce((sum, p) => sum + Number(p.stock || 0), 0), [products]);
+  const lowStockCount = useMemo(() => products.filter((p) => Number(p.stock || 0) <= Number(p.reorderLevel ?? 10)).length, [products]);
+  const inventoryValue = useMemo(() => products.reduce((sum, p) => {
+    const unitValue = p.cost ?? p.price ?? 0;
+    return sum + Number(unitValue) * Number(p.stock || 0);
+  }, 0), [products]);
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -27,7 +64,7 @@ const DashboardHome = () => {
           </div>
           <div className="min-w-0">
             <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Total Revenue</p>
-            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">₱45,230</h3>
+            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">₱{totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
             <p className="text-xs md:text-sm text-success font-medium">↑ 12.5% vs last event</p>
           </div>
         </div>
@@ -38,8 +75,8 @@ const DashboardHome = () => {
           </div>
           <div className="min-w-0">
             <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Transactions</p>
-            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">1,284</h3>
-            <p className="text-xs md:text-sm text-muted-foreground">₱35.25 avg • <span className="text-primary">↑ 8.2%</span></p>
+            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">{totalTransactions.toLocaleString()}</h3>
+            <p className="text-xs md:text-sm text-muted-foreground">₱{avgTransaction.toFixed(2)} avg • <span className="text-primary">↑ 8.2%</span></p>
           </div>
         </div>
 
@@ -49,8 +86,8 @@ const DashboardHome = () => {
           </div>
           <div className="min-w-0">
             <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Inventory Value</p>
-            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">₱128,450</h3>
-            <p className="text-xs md:text-sm text-muted-foreground">248 items • <span className="text-destructive">12 low stock</span></p>
+            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">₱{inventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+            <p className="text-xs md:text-sm text-muted-foreground">{totalUnits.toLocaleString()} items • <span className="text-destructive">{lowStockCount} low stock</span></p>
           </div>
         </div>
       </div>

@@ -214,7 +214,7 @@ const POS = () => {
       const list: Product[] = Object.entries(obj).map(([id, p]) => {
         const raw = p as unknown as Record<string, unknown>;
         const imagePath = typeof raw.imagePath === "string" ? (raw.imagePath as string) : undefined;
-        const resolved = imagePath ? supabase.storage.from("product-images").getPublicUrl(imagePath).data.publicUrl : undefined;
+        const resolved = imagePath ? supabase?.storage.from("product_images").getPublicUrl(imagePath).data.publicUrl : undefined;
         const fallback = typeof raw.imageUrl === "string" && raw.imageUrl
           ? (raw.imageUrl as string)
           : typeof raw.imageURL === "string" && raw.imageURL

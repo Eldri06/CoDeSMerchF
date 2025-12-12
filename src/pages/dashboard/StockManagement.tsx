@@ -4,9 +4,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { exportExcel } from "@/utils/exportExcel";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
+ 
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useEventContext } from "@/context/EventContext";
@@ -27,7 +28,6 @@ const StockManagement = () => {
   const [isMovementsOpen, setIsMovementsOpen] = useState(false);
   const [movementSearch, setMovementSearch] = useState("");
   const [restockMode, setRestockMode] = useState<"add" | "set">("add");
-  const [isEventView, setIsEventView] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [productFilter, setProductFilter] = useState<string>("all");
   const [nameCache, setNameCache] = useState<Record<string, string>>({});
@@ -94,43 +94,45 @@ const StockManagement = () => {
 
   const displayed = useMemo(() => {
     let list = [...products];
-    if (isEventView && currentEventId) {
-      const candidates = [currentEventId, currentEventName];
-      const idOrNameMatches = (p: Product) => {
-        if ((p.eventId ?? null) && candidates.includes(p.eventId as string)) return true;
+    if (currentEventId) {
+      const norm = (v: string | null | undefined) => String(v || "").trim().toLowerCase();
+      const candId = norm(currentEventId);
+      const idMatches = (p: Product) => {
+        if ((p.eventId ?? null) && norm(p.eventId as string) === candId) return true;
         const keys = Object.keys(p.stockByEvent || {});
-        return keys.some((k) => candidates.includes(k));
+        return keys.some((k) => norm(k) === candId);
       };
-      list = products.filter(idOrNameMatches);
+      list = products.filter(idMatches);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q));
     }
-    if (isEventView && currentEventId) {
+    if (currentEventId) {
+      const norm = (v: string | null | undefined) => String(v || "").trim().toLowerCase();
+      const candId = norm(currentEventId);
       return list.map((p) => {
-        const candidates = [currentEventId, currentEventName];
-        const hasKey = (key: string) => Boolean(p.stockByEvent && key in p.stockByEvent);
-        const matchKey = candidates.find((c) => hasKey(c));
+        const keys = Object.keys(p.stockByEvent || {});
+        const matchKey = keys.find((k) => norm(k) === candId);
         if (matchKey) {
           return { ...p, stock: Number(p.stockByEvent?.[matchKey] ?? 0) } as Product;
         }
-        if ((p.eventId ?? null) && candidates.includes(p.eventId as string)) {
+        if ((p.eventId ?? null) && norm(p.eventId as string) === candId) {
           return { ...p, stock: Number(p.stock ?? 0) } as Product;
         }
         return { ...p, stock: 0 } as Product;
       });
     }
     return list;
-  }, [products, searchQuery, isEventView, currentEventId, currentEventName]);
+  }, [products, searchQuery, currentEventId]);
 
   const metrics = useMemo(() => {
-    const source = isEventView ? displayed : products;
+    const source = displayed;
     const totalProducts = source.length;
     const lowStockCount = source.filter((p) => Number(p.stock ?? 0) < Number(p.reorderLevel ?? 10)).length;
     const inventoryValue = source.reduce((sum, p) => sum + Number(p.stock ?? 0) * Number(p.price || 0), 0);
     return { totalProducts, lowStockCount, inventoryValue };
-  }, [products, displayed, isEventView]);
+  }, [displayed]);
 
   const alerts = useMemo(() => {
     return displayed
@@ -216,17 +218,35 @@ const StockManagement = () => {
     const base = Number(selectedProduct.stock ?? 0);
     const qty = Math.max(0, Math.floor(Number(restockQty || 0)));
     if (qty <= 0) { setIsRestockOpen(false); return; }
-    if (restockMode === "add") {
-      const next = base + qty;
-      await productService.updateStock(selectedProduct.id!, next);
-      await productService.recordStockMovement(selectedProduct.id!, { type: "restock", qty, eventId: currentEventId ?? null, note: "Manual restock" });
-      setMovements((prev) => [...prev, { productId: selectedProduct.id!, qty, type: "restock", eventId: currentEventId ?? null, note: "Manual restock", timestamp: new Date().toISOString() }]);
+    const targetEventId = currentEventId || (selectedProduct.eventId ?? null);
+    if (targetEventId) {
+      const baseEvent = selectedProduct.stockByEvent?.[targetEventId] !== undefined
+        ? Number(selectedProduct.stockByEvent?.[targetEventId] || 0)
+        : (selectedProduct.eventId === targetEventId ? Number(selectedProduct.stock || 0) : 0);
+      if (restockMode === "add") {
+        await productService.updateEventStock(selectedProduct.id!, targetEventId, qty);
+        await productService.recordStockMovement(selectedProduct.id!, { type: "restock", qty, eventId: targetEventId, note: "Manual restock" });
+        setMovements((prev) => [...prev, { productId: selectedProduct.id!, qty, type: "restock", eventId: targetEventId, note: "Manual restock", timestamp: new Date().toISOString() }]);
+      } else {
+        const delta = qty - baseEvent;
+        if (delta === 0) { setIsRestockOpen(false); return; }
+        await productService.updateEventStock(selectedProduct.id!, targetEventId, delta);
+        await productService.recordStockMovement(selectedProduct.id!, { type: "restock", qty: delta, eventId: targetEventId, note: "Manual restock (set)" });
+        setMovements((prev) => [...prev, { productId: selectedProduct.id!, qty: delta, type: "restock", eventId: targetEventId, note: "Manual restock (set)", timestamp: new Date().toISOString() }]);
+      }
     } else {
-      if (qty <= base) { setIsRestockOpen(false); return; }
-      const delta = qty - base;
-      await productService.updateStock(selectedProduct.id!, qty);
-      await productService.recordStockMovement(selectedProduct.id!, { type: "restock", qty: delta, eventId: currentEventId ?? null, note: "Manual restock (set)" });
-      setMovements((prev) => [...prev, { productId: selectedProduct.id!, qty: delta, type: "restock", eventId: currentEventId ?? null, note: "Manual restock (set)", timestamp: new Date().toISOString() }]);
+      if (restockMode === "add") {
+        const next = base + qty;
+        await productService.updateStock(selectedProduct.id!, next);
+        await productService.recordStockMovement(selectedProduct.id!, { type: "restock", qty, eventId: null, note: "Manual restock" });
+        setMovements((prev) => [...prev, { productId: selectedProduct.id!, qty, type: "restock", eventId: null, note: "Manual restock", timestamp: new Date().toISOString() }]);
+      } else {
+        const delta = qty - base;
+        if (delta === 0) { setIsRestockOpen(false); return; }
+        await productService.updateStock(selectedProduct.id!, qty);
+        await productService.recordStockMovement(selectedProduct.id!, { type: "restock", qty: delta, eventId: null, note: "Manual restock (set)" });
+        setMovements((prev) => [...prev, { productId: selectedProduct.id!, qty: delta, type: "restock", eventId: null, note: "Manual restock (set)", timestamp: new Date().toISOString() }]);
+      }
     }
     setIsRestockOpen(false);
     await reloadProducts();
@@ -241,16 +261,10 @@ const StockManagement = () => {
         </div>
         <div className="flex items-center gap-3">
           <Badge>{currentEventName}</Badge>
-          <div className="flex items-center gap-2">
-            <span className="text-xs md:text-sm">Event view</span>
-            <Switch checked={isEventView} onCheckedChange={setIsEventView} />
-          </div>
         </div>
       </div>
 
-      {/* Stat Cards - Hidden in event view */}
-      {!isEventView && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
           <Card className="p-3 md:p-6">
             <div className="flex items-center justify-between mb-2 md:mb-4">
               <div className="w-9 h-9 md:w-12 md:h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -283,8 +297,7 @@ const StockManagement = () => {
             <h3 className="text-lg md:text-2xl font-bold mb-0.5 md:mb-1">₱{metrics.inventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
             <p className="text-xs md:text-sm text-muted-foreground">Inventory Value</p>
           </Card>
-        </div>
-      )}
+      </div>
 
       <Card className="p-3 md:p-4">
         <div className="relative">
@@ -293,9 +306,8 @@ const StockManagement = () => {
         </div>
       </Card>
 
-      <div className={`${isEventView ? "grid grid-cols-1 place-items-center" : "grid grid-cols-1 lg:grid-cols-2"} gap-4 md:gap-6`}>
-        {!isEventView && (
-          <Card className="p-4 md:p-6">
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6`}>
+        <Card className="p-4 md:p-6">
             <div className="flex items-center justify-between mb-4 md:mb-6">
               <h2 className="text-lg md:text-xl font-bold">Low Stock Alerts</h2>
               <Badge variant="destructive" className="text-xs">{alerts.length} items</Badge>
@@ -327,9 +339,8 @@ const StockManagement = () => {
               ))}
             </div>
           </Card>
-        )}
 
-        <Card className={`p-4 md:p-6 ${isEventView ? "w-full md:max-w-2xl mx-auto" : ""}`}>
+        <Card className={`p-4 md:p-6`}>
           <div className="flex items-center justify-between mb-4 md:mb-6">
             <h2 className="text-lg md:text-xl font-bold">Recent Movements</h2>
             <Button variant="outline" size="sm" className="text-xs md:text-sm" onClick={() => setIsMovementsOpen(true)}>View All</Button>
@@ -456,20 +467,24 @@ const StockManagement = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsMovementsOpen(false)}>Close</Button>
-            <Button onClick={() => {
-              const rows = filteredMovements;
-              const header = ["Time","Product","Type","Qty","Reason"];
-              const csv = [header.join(","), ...rows.map(r => [r.time, (productMap[r.productId]?.name || nameCache[r.productId] || r.product).replace(/,/g, " "), r.type, String(r.quantity), r.reason.replace(/,/g, " ")].join(","))].join("\n");
-              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `movements_${currentEventId || 'all'}.csv`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-            }}>Export CSV</Button>
+            <Button onClick={async () => {
+              const columns = [
+                { header: "Time", key: "time" },
+                { header: "Product", key: "product" },
+                { header: "Type", key: "type" },
+                { header: "Qty", key: "quantity" },
+                { header: "Reason", key: "reason" },
+              ];
+              const rows = filteredMovements.map((r) => ({
+                time: r.time,
+                product: (productMap[r.productId]?.name || nameCache[r.productId] || r.product),
+                type: r.type,
+                quantity: r.quantity,
+                reason: r.reason,
+              }));
+              const subtitle = `Event: ${currentEventId || 'All'} | Exported: ${new Date().toLocaleString()}`;
+              await exportExcel({ filename: `movements_${currentEventId || 'all'}`, title: "Stock Movements", columns, rows, subtitle, includeTitleColumn: true, titleColumnName: "Title", titleValue: "Stock Movements", dateKeys: ["time"] });
+            }}>Export Excel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

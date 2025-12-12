@@ -1,7 +1,8 @@
 // src/pages/dashboard/Products.tsx
 // FIXED: Add Product button now actually opens dialog
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Search, Filter, Plus, Package, Edit, Trash2, MoreVertical, X } from "lucide-react";
+import { exportExcel } from "@/utils/exportExcel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -40,7 +41,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { productService, Product } from "@/services/productService";
 import { Transaction, TransactionItem } from "@/services/transactionService";
-import { database } from "@/config/firebase";
+import { database, supabase } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
 import { useEventContext } from "@/context/EventContext";
 
@@ -74,12 +75,18 @@ const Products = () => {
     sku: "",
     category: "Shirts",
     description: "",
+    imageUrl: "",
+    imagePath: "",
     price: "",
     cost: "",
     stock: "",
     reorderLevel: "10",
     maxStock: "100",
   });
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const editFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingEditImage, setUploadingEditImage] = useState(false);
 
   const categories = ["Shirts", "Lanyards", "Keychains", "Stickers", "Mugs", "Others"];
 
@@ -114,23 +121,23 @@ const Products = () => {
     }
 
     if (currentEventId) {
-      const cand = [norm(currentEventId), norm(currentEventName)];
-      const idOrNameMatches = (p: Product) => {
-        if ((p.eventId ?? null) && cand.includes(norm(p.eventId as string))) return true;
+      const candId = norm(currentEventId);
+      const idMatches = (p: Product) => {
+        if ((p.eventId ?? null) && norm(p.eventId as string) === candId) return true;
         const keys = Object.keys(p.stockByEvent || {});
-        return keys.some((k) => cand.includes(norm(k)));
+        return keys.some((k) => norm(k) === candId);
       };
-      filtered = filtered.filter(idOrNameMatches).map((p) => {
+      filtered = filtered.filter(idMatches).map((p) => {
         const keys = Object.keys(p.stockByEvent || {});
-        const mk = keys.find((k) => cand.includes(norm(k)));
+        const mk = keys.find((k) => norm(k) === candId);
         if (mk) return { ...p, stock: Number(p.stockByEvent?.[mk] ?? 0) } as Product;
-        if ((p.eventId ?? null) && cand.includes(norm(p.eventId as string))) return { ...p, stock: Number(p.stock ?? 0) } as Product;
+        if ((p.eventId ?? null) && norm(p.eventId as string) === candId) return { ...p, stock: Number(p.stock ?? 0) } as Product;
         return { ...p, stock: 0 } as Product;
       });
     }
 
     return filtered;
-  }, [products, selectedCategory, selectedStatus, searchQuery, currentEventId, currentEventName]);
+  }, [products, selectedCategory, selectedStatus, searchQuery, currentEventId]);
 
   useEffect(() => {
     const r = ref(database, "transactions");
@@ -190,6 +197,93 @@ const Products = () => {
     });
   };
 
+  const handleImagePick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be ≤ 5MB"); return; }
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) { toast.error("Supabase not configured"); return; }
+    setUploadingImage(true);
+    try {
+      // Ensure Supabase bucket exists and is public (one-time per environment)
+      try {
+        await fetch(`${import.meta.env.VITE_API_URL}/storage/ensure-bucket`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bucketName: 'product-images', public: true }),
+        });
+      } catch { void 0; }
+      const safeSku = (formData.sku || "product").replace(/[^a-zA-Z0-9-_]/g, "_");
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `products/${safeSku}-${Date.now()}.${ext}`;
+      const bucket = "product-images";
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('bucket', bucket);
+      fd.append('path', path);
+      const resp = await fetch(`${import.meta.env.VITE_API_URL}/storage/upload`, { method: 'POST', body: fd });
+      const payload = await resp.json();
+      if (!resp.ok || !payload.success) {
+        toast.error(`Upload failed: ${payload.error || resp.statusText}`);
+      } else {
+        const url = String(payload.url || '');
+        setFormData({ ...formData, imageUrl: url, imagePath: path });
+        toast.success("Image uploaded");
+      }
+    } catch (err) {
+      toast.error("Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleEditImagePick = () => {
+    editFileInputRef.current?.click();
+  };
+
+  const handleEditImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be ≤ 5MB"); return; }
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) { toast.error("Supabase not configured"); return; }
+    setUploadingEditImage(true);
+    try {
+      try {
+        await fetch(`${import.meta.env.VITE_API_URL}/storage/ensure-bucket`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bucketName: 'product-images', public: true })
+        });
+      } catch { void 0; }
+      const safeSku = (String(editData.sku || selectedProduct?.sku || 'product')).replace(/[^a-zA-Z0-9-_]/g, '_');
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `products/${safeSku}-${Date.now()}.${ext}`;
+      const bucket = 'product-images';
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('bucket', bucket);
+      fd.append('path', path);
+      const resp = await fetch(`${import.meta.env.VITE_API_URL}/storage/upload`, { method: 'POST', body: fd });
+      const payload = await resp.json();
+      if (!resp.ok || !payload.success) {
+        toast.error(`Upload failed: ${payload.error || resp.statusText}`);
+      } else {
+        const url = String(payload.url || '');
+        setEditData((prev) => ({ ...prev, imageUrl: url, imagePath: path }));
+        toast.success("Image uploaded");
+      }
+    } catch (err) {
+      toast.error("Failed to upload image");
+    } finally {
+      setUploadingEditImage(false);
+      if (editFileInputRef.current) editFileInputRef.current.value = "";
+    }
+  };
+
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {
       toast.error("Product name is required");
@@ -216,6 +310,8 @@ const Products = () => {
       sku: "",
       category: "Shirts",
       description: "",
+      imageUrl: "",
+      imagePath: "",
       price: "",
       cost: "",
       stock: "",
@@ -248,6 +344,13 @@ const Products = () => {
       eventId: currentEventId ?? null,
       status: parseInt(formData.stock) > 0 ? "Active" as const : "Out of Stock" as const,
     };
+
+    if (formData.imageUrl && formData.imageUrl.trim() !== "") {
+      (productData as typeof productData & { imageUrl?: string }).imageUrl = formData.imageUrl.trim();
+    }
+    if (formData.imagePath && formData.imagePath.trim() !== "") {
+      (productData as typeof productData & { imagePath?: string }).imagePath = formData.imagePath.trim();
+    }
 
     const result = await productService.createProduct(productData);
     console.log("📥 Result:", result);
@@ -324,21 +427,37 @@ const Products = () => {
           <Button 
             variant="outline"
             className="gap-2"
-            onClick={() => {
-              const headers = ["id","name","sku","category","price","stock","status","eventId","createdAt","updatedAt"];
-              const rows = displayedProducts.map(p => [p.id,p.name,p.sku,p.category,p.price,p.stock,p.status,p.eventId ?? "",p.createdAt ?? "",p.updatedAt ?? ""]);
-              const csv = [headers.join(","), ...rows.map(r => r.map((v) => String(v).replace(/,/g, " ")).join(","))].join("\n");
-              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `products_${Date.now()}.csv`;
-              a.click();
-              URL.revokeObjectURL(url);
+            onClick={async () => {
+              const columns = [
+                { header: "ID", key: "id" },
+                { header: "Name", key: "name" },
+                { header: "SKU", key: "sku" },
+                { header: "Category", key: "category" },
+                { header: "Price", key: "price" },
+                { header: "Stock", key: "stock" },
+                { header: "Status", key: "status" },
+                { header: "Event", key: "eventId" },
+                { header: "Created", key: "createdAt" },
+                { header: "Updated", key: "updatedAt" },
+              ];
+              const rows = displayedProducts.map((p) => ({
+                id: p.id,
+                name: p.name,
+                sku: p.sku,
+                category: p.category,
+                price: p.price,
+                stock: p.stock,
+                status: p.status,
+                eventId: p.eventId ?? "",
+                createdAt: p.createdAt ?? "",
+                updatedAt: p.updatedAt ?? "",
+              }));
+              const subtitle = `Exported: ${new Date().toLocaleString()} | Category: ${selectedCategory === "all" ? "All" : selectedCategory}`;
+              await exportExcel({ filename: `products_${Date.now()}`, title: "Products", columns, rows, subtitle, includeTitleColumn: true, titleColumnName: "Title", titleValue: "Products List", currencyKeys: ["price"], dateKeys: ["createdAt","updatedAt"] });
             }}
             type="button"
           >
-            Export CSV
+            Export Excel
           </Button>
           <div className="relative">
             <Button 
@@ -473,13 +592,17 @@ const Products = () => {
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+              <TableBody>
               {displayedProducts.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-muted rounded flex items-center justify-center">
-                        <Package size={20} className="text-muted-foreground" />
+                      <div className="w-10 h-10 bg-muted rounded overflow-hidden flex items-center justify-center">
+                        {product.imageUrl ? (
+                          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package size={20} className="text-muted-foreground" />
+                        )}
                       </div>
                       <div>
                         <p className="font-medium">{product.name}</p>
@@ -660,6 +783,24 @@ const Products = () => {
               />
             </div>
 
+            <div className="col-span-2 flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageFileChange}
+              />
+              <Button type="button" onClick={handleImagePick} disabled={uploadingImage}>
+                {uploadingImage ? "Uploading..." : formData.imageUrl ? "Change Image" : "Upload Image"}
+              </Button>
+              {formData.imageUrl && (
+                <div className="w-12 h-12 rounded overflow-hidden border border-border">
+                  <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
+
             <div className="col-span-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
@@ -698,6 +839,17 @@ const Products = () => {
             <DialogTitle>Edit Product</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <input ref={editFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleEditImageFileChange} />
+              <Button type="button" onClick={handleEditImagePick} disabled={uploadingEditImage}>
+                {uploadingEditImage ? "Uploading..." : (editData.imageUrl || selectedProduct?.imageUrl) ? "Change Image" : "Upload Image"}
+              </Button>
+              {(editData.imageUrl || selectedProduct?.imageUrl) && (
+                <div className="w-12 h-12 rounded overflow-hidden border border-border">
+                  <img src={String(editData.imageUrl || selectedProduct?.imageUrl)} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
             <div className="space-y-2">
               <Label>Name</Label>
               <Input value={String(editData.name || "")} onChange={(e) => setEditData((prev) => ({ ...prev, name: e.target.value }))} />
@@ -806,12 +958,17 @@ const Products = () => {
               const base = Number(selectedProduct.stock ?? 0);
               const qty = Math.max(0, Math.floor(Number(adjustQty || 0)));
               if (qty < 0) { setIsAdjustOpen(false); return; }
-              if (currentEventId) {
+              const targetEventId = currentEventId || (selectedProduct.eventId ?? null);
+              if (targetEventId) {
+                const baseEvent = selectedProduct.stockByEvent?.[targetEventId] !== undefined
+                  ? Number(selectedProduct.stockByEvent?.[targetEventId] || 0)
+                  : (selectedProduct.eventId === targetEventId ? Number(selectedProduct.stock || 0) : 0);
                 if (adjustMode === "add") {
-                  await productService.updateEventStock(selectedProduct.id, currentEventId, qty);
+                  await productService.updateEventStock(selectedProduct.id, targetEventId, qty);
                 } else {
-                  const delta = qty - base;
-                  await productService.updateEventStock(selectedProduct.id, currentEventId, delta);
+                  const delta = qty - baseEvent;
+                  if (delta === 0) { setIsAdjustOpen(false); setSelectedProduct(null); return; }
+                  await productService.updateEventStock(selectedProduct.id, targetEventId, delta);
                 }
               } else {
                 if (adjustMode === "add") {

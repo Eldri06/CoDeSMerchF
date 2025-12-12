@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useEventContext } from "@/context/EventContext";
 import { Transaction } from "@/services/transactionService";
+import { Product } from "@/services/productService";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
 import {
@@ -27,6 +28,7 @@ const Revenue = () => {
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showPaymentChart, setShowPaymentChart] = useState(false);
   const [txns, setTxns] = useState<Transaction[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     const r = ref(database, "transactions");
@@ -39,7 +41,39 @@ const Revenue = () => {
     return () => unsub();
   }, [currentEventId]);
 
+  useEffect(() => {
+    const r = ref(database, "products");
+    const unsub = onValue(r, (snap) => {
+      const obj = snap.exists() ? (snap.val() as Record<string, Product>) : {};
+      const list: Product[] = Object.entries(obj).map(([id, p]) => ({ ...(p as Product), id }));
+      setProducts(list);
+    });
+    return () => unsub();
+  }, []);
+
   const totalRevenue = useMemo(() => txns.reduce((sum, t) => sum + Number(t.total || 0), 0), [txns]);
+
+  const productCostMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    products.forEach((p) => {
+      if (p.id) map[p.id] = Number(p.cost || 0);
+    });
+    return map;
+  }, [products]);
+
+  const totalCosts = useMemo(() => {
+    return txns.reduce((sum, t) => {
+      const items = Array.isArray(t.items) ? t.items : [];
+      const costForTxn = items.reduce((acc, it) => acc + Number(it.quantity || 0) * Number(productCostMap[it.productId] || 0), 0);
+      return sum + costForTxn;
+    }, 0);
+  }, [txns, productCostMap]);
+
+  const netProfit = useMemo(() => Math.max(0, totalRevenue - totalCosts), [totalRevenue, totalCosts]);
+  const profitMarginPct = useMemo(() => {
+    if (!totalRevenue) return 0;
+    return (netProfit / totalRevenue) * 100;
+  }, [netProfit, totalRevenue]);
   type PaymentSlice = { name: string; value: number; percentage: number };
   const paymentData: PaymentSlice[] = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -59,8 +93,18 @@ const Revenue = () => {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       byDay[key] = (byDay[key] || 0) + Number(t.total || 0);
     });
-    return Object.entries(byDay).map(([day, revenue]) => ({ day, revenue }));
+    return Object.entries(byDay)
+      .sort(([d1], [d2]) => d1.localeCompare(d2))
+      .map(([day, revenue]) => ({ day, revenue }));
   }, [txns]);
+
+  const changeVsPrevDay = useMemo(() => {
+    if (revenueData.length < 2) return null;
+    const prev = Number(revenueData[revenueData.length - 2].revenue || 0);
+    const last = Number(revenueData[revenueData.length - 1].revenue || 0);
+    if (prev === 0) return null;
+    return ((last - prev) / prev) * 100;
+  }, [revenueData]);
 
   const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--muted))"];
 
@@ -122,10 +166,14 @@ const Revenue = () => {
           </div>
           <h3 className="text-xl md:text-2xl font-bold mb-1">₱{totalRevenue.toFixed(2)}</h3>
           <p className="text-xs md:text-sm text-muted-foreground mb-2">Total Sales</p>
-          <div className="flex items-center gap-1 text-success text-xs md:text-sm">
-            <TrendingUp size={14} />
-            <span>+15.2% vs last event</span>
-          </div>
+          {changeVsPrevDay !== null ? (
+            <div className="flex items-center gap-1 text-success text-xs md:text-sm">
+              <TrendingUp size={14} />
+              <span>{`${changeVsPrevDay >= 0 ? "+" : ""}${changeVsPrevDay.toFixed(1)}% vs prev day`}</span>
+            </div>
+          ) : (
+            <div className="text-xs md:text-sm text-muted-foreground">No prior day data</div>
+          )}
         </Card>
 
         <Card className="p-4 md:p-6">
@@ -133,9 +181,9 @@ const Revenue = () => {
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-success/10 flex items-center justify-center">
               <TrendingUp className="text-success" size={20} />
             </div>
-            <Badge variant="secondary" className="text-xs">40.0%</Badge>
+            <Badge variant="secondary" className="text-xs">{`${profitMarginPct.toFixed(1)}%`}</Badge>
           </div>
-          <h3 className="text-xl md:text-2xl font-bold mb-1">₱18,092</h3>
+          <h3 className="text-xl md:text-2xl font-bold mb-1">₱{netProfit.toFixed(2)}</h3>
           <p className="text-xs md:text-sm text-muted-foreground mb-2">Net Profit</p>
           <p className="text-xs text-muted-foreground">Profit Margin</p>
         </Card>
@@ -147,9 +195,9 @@ const Revenue = () => {
             </div>
             <Badge variant="outline" className="text-xs">Breakdown</Badge>
           </div>
-          <h3 className="text-xl md:text-2xl font-bold mb-1">₱27,138</h3>
+          <h3 className="text-xl md:text-2xl font-bold mb-1">₱{totalCosts.toFixed(2)}</h3>
           <p className="text-xs md:text-sm text-muted-foreground mb-2">Total Costs</p>
-          <p className="text-xs text-muted-foreground">60% of revenue</p>
+          <p className="text-xs text-muted-foreground">{totalRevenue ? `${((totalCosts / totalRevenue) * 100).toFixed(1)}% of revenue` : "—"}</p>
         </Card>
       </div>
 

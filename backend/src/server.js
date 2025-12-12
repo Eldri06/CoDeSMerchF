@@ -38,6 +38,7 @@ app.get('/api', (req, res) => {
 // API Routes
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/storage', require('./routes/storageRoutes'));
 
 // 404 handler - This should be LAST
 app.use((req, res) => {

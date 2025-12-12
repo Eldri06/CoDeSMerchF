@@ -15,6 +15,7 @@ export interface Product {
   reorderLevel?: number;
   maxStock?: number;
   imageUrl?: string;
+  imagePath?: string;
   eventId?: string | null;
   status: "Active" | "Inactive" | "Out of Stock";
   createdAt?: string;

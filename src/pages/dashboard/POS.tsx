@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { authService } from "@/services/authService";
 import codesLogo from "@/assets/codes-logo.png";
-import { database } from "@/config/firebase";
+import { database, supabase } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
 
 interface CartItem {
@@ -22,8 +22,10 @@ interface CartItem {
   stock: number;
   quantity: number;
   sku?: string;
+  imageUrl?: string;
 }
 
+type YearLevel = "1st Year" | "2nd Year" | "3rd Year" | "4th Year";
 interface ReceiptTxnItem { name: string; quantity: number; price: number }
 interface ReceiptTxn {
   id?: string;
@@ -34,33 +36,41 @@ interface ReceiptTxn {
   createdAt: string;
   paymentMethod: string;
   cashier: string;
+  customerName?: string;
+  yearLevel?: "1st Year" | "2nd Year" | "3rd Year" | "4th Year";
 }
 
 const CartContent = ({
   cartItems,
   subtotal,
   total,
-  discount,
-  setDiscount,
   paymentMethod,
   setPaymentMethod,
+  customerName,
+  setCustomerName,
+  yearLevel,
+  setYearLevel,
   updateQuantity,
   removeFromCart,
   checkout,
+  isCheckingOut,
 }: {
   cartItems: CartItem[];
   subtotal: number;
   total: number;
-  discount: number;
-  setDiscount: (n: number) => void;
   paymentMethod: string;
   setPaymentMethod: (v: string) => void;
+  customerName: string;
+  setCustomerName: (v: string) => void;
+  yearLevel: YearLevel | undefined;
+  setYearLevel: (v: YearLevel | undefined) => void;
   updateQuantity: (id: string, change: number) => void;
   removeFromCart: (id: string) => void;
   checkout: () => Promise<void> | void;
+  isCheckingOut: boolean;
 }) => (
   <>
-    <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+    <div className="flex-1 overflow-y-auto space-y-3 mb-6 pr-1">
       {cartItems.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full text-center py-12">
           <ShoppingCart size={48} className="text-muted-foreground mb-4" />
@@ -69,29 +79,33 @@ const CartContent = ({
         </div>
       ) : (
         cartItems.map((item) => (
-          <div key={item.id} className="flex gap-3 p-3 bg-muted rounded-lg">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-background rounded flex items-center justify-center flex-shrink-0">
-              <Package size={20} className="text-muted-foreground" />
+          <div key={item.id} className="flex items-center gap-3 p-3 bg-muted rounded-lg min-h-[56px]">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-background rounded overflow-hidden flex items-center justify-center flex-shrink-0">
+              {item.imageUrl ? (
+                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+              ) : (
+                <Package size={20} className="text-muted-foreground" />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm truncate">{item.name}</p>
               <p className="text-xs text-muted-foreground">₱{item.price} each</p>
             </div>
             <div className="flex flex-col items-end gap-1">
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-6 w-6 p-0"
+                  className="h-8 w-8 p-0 rounded-full flex-shrink-0"
                   onClick={() => updateQuantity(item.id, -1)}
                 >
                   -
                 </Button>
-                <span className="w-6 text-center font-medium text-sm">{item.quantity}</span>
+                <div className="h-8 w-8 flex items-center justify-center font-medium text-sm flex-shrink-0">{item.quantity}</div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-6 w-6 p-0"
+                  className="h-8 w-8 p-0 rounded-full flex-shrink-0"
                   onClick={() => updateQuantity(item.id, 1)}
                 >
                   +
@@ -112,27 +126,13 @@ const CartContent = ({
       )}
     </div>
 
-    <div className="space-y-3 pt-4 border-t">
-      <div className="space-y-2 bg-muted p-3 md:p-4 rounded-lg">
+    <div className="space-y-4 pt-6 border-t bg-background rounded-lg p-3 md:p-4 flex-shrink-0">
+      <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span>Items ({cartItems.length})</span>
           <span>₱{subtotal.toFixed(2)}</span>
         </div>
-        <div className="grid grid-cols-2 gap-2 items-center text-sm">
-          <span>Discount</span>
-          <Input
-            type="number"
-            min={0}
-            step={0.01}
-            value={discount}
-            onChange={(e) => {
-              const val = Number(e.target.value || 0);
-              const clamped = Math.max(0, Math.min(val, subtotal));
-              setDiscount(Number.isFinite(clamped) ? clamped : 0);
-            }}
-            className="h-8 text-right"
-          />
-        </div>
+        
         <div className="h-px bg-border my-2" />
         <div className="flex justify-between text-base md:text-lg font-bold">
           <span>Total</span>
@@ -151,6 +151,24 @@ const CartContent = ({
               </SelectContent>
             </Select>
           </div>
+          <div>
+            <span className="text-xs text-muted-foreground">Student Name</span>
+            <Input className="mt-1 h-8" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Enter name" />
+          </div>
+          <div>
+            <span className="text-xs text-muted-foreground">Year Level</span>
+            <Select value={yearLevel ?? undefined} onValueChange={(v: YearLevel) => setYearLevel(v)}>
+              <SelectTrigger className="mt-1 h-8">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1st Year">1st Year</SelectItem>
+                <SelectItem value="2nd Year">2nd Year</SelectItem>
+                <SelectItem value="3rd Year">3rd Year</SelectItem>
+                <SelectItem value="4th Year">4th Year</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="text-xs text-muted-foreground flex items-end justify-end">
             <span>Cashier: {authService.getCurrentUser()?.fullName || ""}</span>
           </div>
@@ -159,11 +177,14 @@ const CartContent = ({
 
       <Button
         size="lg"
-        className="w-full"
-        disabled={cartItems.length === 0}
+        className="w-full h-12"
+        disabled={cartItems.length === 0 || isCheckingOut}
         onClick={checkout}
+        aria-busy={isCheckingOut}
       >
-        Checkout <span className="ml-2">→</span>
+        {isCheckingOut ? "Processing..." : (
+          <>Checkout <span className="ml-2">→</span></>
+        )}
       </Button>
     </div>
   </>
@@ -173,20 +194,36 @@ const POS = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const { currentEventId, currentEventName } = useEventContext();
+  const { currentEventId, currentEventName, events } = useEventContext();
   const [products, setProducts] = useState<Product[]>([]);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [lastTxn, setLastTxn] = useState<ReceiptTxn | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string>("cash");
-  const [discount, setDiscount] = useState<number>(0);
+  
+  const [customerName, setCustomerName] = useState<string>("");
+  const [yearLevel, setYearLevel] = useState<YearLevel | undefined>(undefined);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [isCheckingOut, setIsCheckingOut] = useState<boolean>(false);
+  const [addLock, setAddLock] = useState<Record<string, boolean>>({});
   const categoryOptions = ["All", "T-Shirt", "Shirts", "Lanyards", "Keychains", "Others"];
 
   useEffect(() => {
     const r = ref(database, "products");
     const unsub = onValue(r, (snap) => {
       const obj = snap.exists() ? (snap.val() as Record<string, Product>) : {};
-      const list: Product[] = Object.entries(obj).map(([id, p]) => ({ ...(p as Product), id }));
+      const list: Product[] = Object.entries(obj).map(([id, p]) => {
+        const raw = p as unknown as Record<string, unknown>;
+        const imagePath = typeof raw.imagePath === "string" ? (raw.imagePath as string) : undefined;
+        const resolved = imagePath ? supabase.storage.from("product-images").getPublicUrl(imagePath).data.publicUrl : undefined;
+        const fallback = typeof raw.imageUrl === "string" && raw.imageUrl
+          ? (raw.imageUrl as string)
+          : typeof raw.imageURL === "string" && raw.imageURL
+          ? (raw.imageURL as string)
+          : typeof raw.image_url === "string" && raw.image_url
+          ? (raw.image_url as string)
+          : undefined;
+        return { ...(p as Product), id, imageUrl: resolved || fallback } as Product;
+      });
       setProducts(list);
     });
     return () => unsub();
@@ -194,15 +231,15 @@ const POS = () => {
 
   const displayedProducts = useMemo(() => {
     const norm = (v: string | null | undefined) => String(v || "").trim().toLowerCase();
-    const cand = [norm(currentEventId), norm(currentEventName)];
+    const candId = norm(currentEventId);
     let list = [...products];
     if (currentEventId) {
-      const idOrNameMatches = (p: Product) => {
-        if ((p.eventId ?? null) && cand.includes(norm(p.eventId as string))) return true;
+      const idMatches = (p: Product) => {
+        if ((p.eventId ?? null) && norm(p.eventId as string) === candId) return true;
         const keys = Object.keys(p.stockByEvent || {});
-        return keys.some((k) => cand.includes(norm(k)));
+        return keys.some((k) => norm(k) === candId);
       };
-      list = list.filter(idOrNameMatches);
+      list = list.filter(idMatches);
     }
     if (selectedCategory !== "All") {
       const cat = selectedCategory.toLowerCase();
@@ -215,60 +252,91 @@ const POS = () => {
     if (currentEventId) {
       return list.map((p) => {
         const keys = Object.keys(p.stockByEvent || {});
-        const matchKey = keys.find((k) => cand.includes(norm(k)));
+        const matchKey = keys.find((k) => norm(k) === candId);
         if (matchKey) {
           return { ...p, stock: Number(p.stockByEvent?.[matchKey] ?? 0) } as Product;
         }
-        if ((p.eventId ?? null) && cand.includes(norm(p.eventId as string))) {
+        if ((p.eventId ?? null) && norm(p.eventId as string) === candId) {
           return { ...p, stock: Number(p.stock ?? 0) } as Product;
         }
         return { ...p, stock: 0 } as Product;
       });
     }
     return list;
-  }, [products, currentEventId, currentEventName, searchQuery, selectedCategory]);
+  }, [products, currentEventId, searchQuery, selectedCategory]);
 
   const addToCart = (product: Product) => {
-    const existingItem = cartItems.find(item => item.id === (product.id as string));
-    if (existingItem) {
-      setCartItems(cartItems.map(item => 
-        item.id === (product.id as string) ? { ...item, quantity: item.quantity + 1 } : item
-      ));
-    } else {
-      setCartItems([
-        ...cartItems,
-        {
-          id: product.id as string,
-          name: product.name,
-          price: product.price,
-          stock: Number(product.stock ?? 0),
-          quantity: 1,
-          sku: product.sku,
-        },
-      ]);
-    }
+    const pid = String(product.id || "");
+    if (addLock[pid]) return;
+    setAddLock((m) => ({ ...m, [pid]: true }));
+    setTimeout(() => {
+      setAddLock((m) => ({ ...m, [pid]: false }));
+    }, 300);
+    const raw = product as unknown as Record<string, unknown>;
+    const img =
+      (typeof raw.imageUrl === "string" && (raw.imageUrl as string)) ||
+      (typeof raw.imageURL === "string" && (raw.imageURL as string)) ||
+      (typeof raw.image_url === "string" && (raw.image_url as string)) ||
+      product.imageUrl;
+    setCartItems([
+      {
+        id: pid,
+        name: product.name,
+        price: product.price,
+        stock: Number(product.stock ?? 0),
+        quantity: 1,
+        sku: product.sku,
+        imageUrl: img,
+      },
+    ]);
+  };
+
+  const selectProduct = (product: Product) => {
+    const pid = String(product.id || "");
+    const raw = product as unknown as Record<string, unknown>;
+    const img =
+      (typeof raw.imageUrl === "string" && (raw.imageUrl as string)) ||
+      (typeof raw.imageURL === "string" && (raw.imageURL as string)) ||
+      (typeof raw.image_url === "string" && (raw.image_url as string)) ||
+      product.imageUrl;
+    setCartItems([
+      {
+        id: pid,
+        name: product.name,
+        price: product.price,
+        stock: Number(product.stock ?? 0),
+        quantity: 1,
+        sku: product.sku,
+        imageUrl: img,
+      },
+    ]);
   };
 
   const updateQuantity = (id: string, change: number) => {
-    setCartItems(cartItems.map(item => {
-      if (item.id === id) {
-        const newQuantity = Math.max(1, Math.min(item.stock, item.quantity + change));
-        return { ...item, quantity: newQuantity };
-      }
-      return item;
-    }).filter(item => item.quantity > 0));
+    setCartItems((prev) =>
+      prev
+        .map((item) => {
+          if (item.id === id) {
+            const newQuantity = Math.max(1, Math.min(item.stock, item.quantity + change));
+            return { ...item, quantity: newQuantity };
+          }
+          return item;
+        })
+        .filter((item) => item.quantity > 0)
+    );
   };
 
   const removeFromCart = (id: string) => {
-    setCartItems(cartItems.filter(item => item.id !== id));
+    setCartItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const total = Math.max(0, subtotal - discount);
+  const total = subtotal;
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   const checkout = async () => {
-    if (cartItems.length === 0) return;
+    if (cartItems.length === 0 || isCheckingOut) return;
+    setIsCheckingOut(true);
     const items = cartItems.map((it) => ({
       productId: String(it.id),
       name: it.name,
@@ -277,21 +345,43 @@ const POS = () => {
       sku: it.sku,
     }));
     const user = authService.getCurrentUser();
+    const eventCandidates = new Set<string>();
+    if (!currentEventId) {
+      items.forEach((it) => {
+        const p = products.find((pp) => String(pp.id || "") === String(it.productId || ""));
+        if (!p) return;
+        if (p.eventId) eventCandidates.add(String(p.eventId));
+        else {
+          const sb = p.stockByEvent || {};
+          Object.keys(sb || {}).forEach((k) => {
+            const val = Number(sb[k] || 0);
+            if (val > 0) eventCandidates.add(String(k));
+          });
+        }
+      });
+    }
+    const inferredEventId = currentEventId || (eventCandidates.size === 1 ? Array.from(eventCandidates)[0] : null);
+    const inferredEventName = inferredEventId ? (events.find((e) => e.id === inferredEventId)?.name || currentEventName) : currentEventName;
     const res = await transactionService.create({
-      eventId: currentEventId ?? null,
+      eventId: inferredEventId ?? null,
       items,
       subtotal,
       total,
       paymentMethod,
       cashier: user?.fullName || "",
+      customerName: customerName || "",
+      yearLevel: yearLevel,
     });
     if (res.success) {
-      setLastTxn({ id: res.id, items, subtotal, total, eventName: currentEventName, createdAt: new Date().toLocaleString(), paymentMethod, cashier: user?.fullName || "" });
+      setLastTxn({ id: res.id, items, subtotal, total, eventName: inferredEventName, createdAt: new Date().toLocaleString(), paymentMethod, cashier: user?.fullName || "", customerName: customerName || "", yearLevel: yearLevel });
       setIsReceiptOpen(true);
       setCartItems([]);
       setIsCartOpen(false);
-      setDiscount(0);
+      
+      setCustomerName("");
+      setYearLevel(undefined);
     }
+    setIsCheckingOut(false);
   };
 
   
@@ -310,9 +400,9 @@ const POS = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button variant="outline" size="icon" className="flex-shrink-0">
-            <Filter size={18} />
-          </Button>
+            <Button variant="outline" size="icon" className="flex-shrink-0" disabled={isCheckingOut}>
+              <Filter size={18} />
+            </Button>
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
@@ -334,10 +424,14 @@ const POS = () => {
             <Card
               key={product.id}
               className="p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all hover:-translate-y-1 active:scale-95"
-              onClick={() => addToCart(product)}
+              onClick={() => selectProduct(product)}
             >
-              <div className="aspect-square bg-muted rounded-lg mb-2 md:mb-3 flex items-center justify-center">
-                <Package size={32} className="text-muted-foreground" />
+              <div className="aspect-square bg-muted rounded-lg mb-2 md:mb-3 flex items-center justify-center overflow-hidden">
+                {product.imageUrl ? (
+                  <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Package size={32} className="text-muted-foreground" />
+                )}
               </div>
               <h3 className="font-semibold mb-1 text-xs md:text-sm truncate">{product.name}</h3>
               <div className="flex items-center justify-between">
@@ -373,18 +467,21 @@ const POS = () => {
               </SheetTitle>
             </SheetHeader>
             <div className="flex-1 flex flex-col overflow-hidden mt-4">
-              <CartContent
-                cartItems={cartItems}
-                subtotal={subtotal}
-                total={total}
-                discount={discount}
-                setDiscount={setDiscount}
+            <CartContent
+              cartItems={cartItems}
+              subtotal={subtotal}
+              total={total}
                 paymentMethod={paymentMethod}
                 setPaymentMethod={setPaymentMethod}
+                customerName={customerName}
+                setCustomerName={setCustomerName}
+                yearLevel={yearLevel}
+                setYearLevel={setYearLevel}
                 updateQuantity={updateQuantity}
                 removeFromCart={removeFromCart}
                 checkout={checkout}
-              />
+                isCheckingOut={isCheckingOut}
+            />
             </div>
           </SheetContent>
         </Sheet>
@@ -400,13 +497,16 @@ const POS = () => {
           cartItems={cartItems}
           subtotal={subtotal}
           total={total}
-          discount={discount}
-          setDiscount={setDiscount}
           paymentMethod={paymentMethod}
           setPaymentMethod={setPaymentMethod}
+          customerName={customerName}
+          setCustomerName={setCustomerName}
+          yearLevel={yearLevel}
+          setYearLevel={setYearLevel}
           updateQuantity={updateQuantity}
           removeFromCart={removeFromCart}
           checkout={checkout}
+          isCheckingOut={isCheckingOut}
         />
       </Card>
 
@@ -424,13 +524,15 @@ const POS = () => {
                   <p className="text-xs text-muted-foreground">UM Tagum College</p>
                 </div>
               </div>
-              <div className="text-sm">
-                <div className="flex justify-between"><span>Event</span><span>{lastTxn.eventName}</span></div>
-                <div className="flex justify-between"><span>Transaction</span><span>{lastTxn.id || "(unsynced)"}</span></div>
-                <div className="flex justify-between"><span>Date</span><span>{lastTxn.createdAt}</span></div>
-                <div className="flex justify-between"><span>Payment</span><span>{String(lastTxn.paymentMethod).toUpperCase()}</span></div>
-                <div className="flex justify-between"><span>Cashier</span><span>{lastTxn.cashier || ""}</span></div>
-              </div>
+                <div className="text-sm">
+                  <div className="flex justify-between"><span>Event</span><span>{lastTxn.eventName}</span></div>
+                  <div className="flex justify-between"><span>Transaction</span><span>{lastTxn.id || "(unsynced)"}</span></div>
+                  <div className="flex justify-between"><span>Date</span><span>{lastTxn.createdAt}</span></div>
+                  <div className="flex justify-between"><span>Payment</span><span>{String(lastTxn.paymentMethod).toUpperCase()}</span></div>
+                  <div className="flex justify-between"><span>Cashier</span><span>{lastTxn.cashier || ""}</span></div>
+                  <div className="flex justify-between"><span>Student</span><span>{lastTxn.customerName || "-"}</span></div>
+                  <div className="flex justify-between"><span>Year Level</span><span>{lastTxn.yearLevel || "-"}</span></div>
+                </div>
               <div className="border-t pt-2 space-y-1">
                 {lastTxn.items.map((it: { name: string; quantity: number; price: number }, idx: number) => (
                   <div key={idx} className="flex justify-between text-sm">

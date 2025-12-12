@@ -37,7 +37,6 @@ const navStructure = [
     section: "Analytics",
     items: [
       { id: "sales-analytics", icon: BarChart, label: "Sales Analytics" },
-      { id: "comparison", icon: GitCompare, label: "Event Comparison" },
     ]
   },
   {

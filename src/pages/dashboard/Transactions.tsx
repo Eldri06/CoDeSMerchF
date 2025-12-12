@@ -1,4 +1,5 @@
 import { Receipt, Search, Filter, Download } from "lucide-react";
+import { exportExcel } from "@/utils/exportExcel";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,12 +9,12 @@ import { useEventContext } from "@/context/EventContext";
 import { transactionService, Transaction, TransactionItem } from "@/services/transactionService";
 import { productService } from "@/services/productService";
 import { eventService } from "@/services/eventService";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
 
 const Transactions = () => {
-  const { currentEventId } = useEventContext();
+  const { currentEventId, currentEventName } = useEventContext();
   interface Row {
     id: string;
     displayId: string;
@@ -23,6 +24,8 @@ const Transactions = () => {
     amount: number;
     payment: string;
     cashier: string;
+    customerName?: string;
+    yearLevel?: string;
     raw: Transaction;
   }
   const [rows, setRows] = useState<Row[]>([]);
@@ -37,12 +40,10 @@ const Transactions = () => {
 
   useEffect(() => {
     (async () => {
-      if (!currentEventId) {
-        const events = await eventService.getAllEvents();
-        const map: Record<string, string> = {};
-        events.forEach((e) => { if (e.id) map[e.id] = e.name; });
-        setEventMap(map);
-      }
+      const events = await eventService.getAllEvents();
+      const map: Record<string, string> = {};
+      events.forEach((e) => { if (e.id) map[e.id] = e.name; });
+      setEventMap(map);
     })();
 
     const r = ref(database, "transactions");
@@ -58,13 +59,15 @@ const Transactions = () => {
             id: idStr,
             displayId,
             date: new Date(t.createdAt || Date.now()).toLocaleString(),
-            event: t.eventId ? (eventMap[t.eventId] || "") : "",
+            event: t.eventId ? (eventMap[t.eventId] || (currentEventId && t.eventId === currentEventId ? currentEventName : "")) : "",
             items: t.items?.length || 0,
             amount: t.total || 0,
             payment: ((t.paymentMethod || "cash") === "cash" ? "Cash" : (t.paymentMethod === "gcash" ? "GCash" : String(t.paymentMethod).toString())) ,
             cashier: t.cashier || "",
+            customerName: t.customerName || "",
+            yearLevel: t.yearLevel || "",
             raw: t,
-          };
+          } as Row;
         })
       );
     });
@@ -76,10 +79,13 @@ const Transactions = () => {
   }, [currentEventId]);
 
   useEffect(() => {
-    if (!currentEventId && Object.keys(eventMap).length > 0) {
-      setRows((prev) => prev.map((r) => ({ ...r, event: r.raw.eventId ? (eventMap[r.raw.eventId] || "") : "" })));
+    if (Object.keys(eventMap).length > 0) {
+      setRows((prev) => prev.map((r) => ({
+        ...r,
+        event: r.raw.eventId ? (eventMap[r.raw.eventId] || (currentEventId && r.raw.eventId === currentEventId ? currentEventName : "")) : "",
+      })));
     }
-  }, [eventMap, currentEventId]);
+  }, [eventMap, currentEventId, currentEventName]);
 
   useEffect(() => {
     const now = new Date();
@@ -159,6 +165,7 @@ const Transactions = () => {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Transaction Details</DialogTitle>
+          <DialogDescription>Review the full details of this transaction</DialogDescription>
         </DialogHeader>
         {selectedTxn ? (
           <div className="space-y-2 text-sm">
@@ -173,15 +180,23 @@ const Transactions = () => {
               </div>
               <div>
                 <p className="text-muted-foreground">Event</p>
-                <p>{selectedTxn.eventId ? (eventMap[selectedTxn.eventId] || "") : "All Events"}</p>
+                <p>{selectedTxn.eventId ? (eventMap[selectedTxn.eventId] || (currentEventId && selectedTxn.eventId === currentEventId ? currentEventName : "")) : "All Events"}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Payment</p>
                 <p>{(selectedTxn.paymentMethod === "cash" ? "Cash" : selectedTxn.paymentMethod === "gcash" ? "GCash" : String(selectedTxn.paymentMethod || "")).toString()}</p>
               </div>
-              <div className="col-span-2">
+              <div>
                 <p className="text-muted-foreground">Cashier</p>
                 <p>{selectedTxn.cashier || ""}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Student</p>
+                <p>{selectedTxn.customerName || ""}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Year Level</p>
+                <p>{selectedTxn.yearLevel || ""}</p>
               </div>
             </div>
             <div className="border-t pt-2 space-y-1">
@@ -221,20 +236,34 @@ const Transactions = () => {
           <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">Transactions</h1>
           <p className="text-sm md:text-base text-muted-foreground">View all sales transactions</p>
         </div>
-        <Button className="gap-2 w-full sm:w-auto" onClick={() => {
-          const headers = ["id","date","event","items","amount","payment","cashier"];
-          const rowsCsv = filtered.map(r => [r.id,r.date,r.event,r.items,r.amount,r.payment,r.cashier]);
-          const csv = [headers.join(","), ...rowsCsv.map(rr => rr.map((v) => String(v).replace(/,/g, " ")).join(","))].join("\n");
-          const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `transactions_${Date.now()}.csv`;
-          a.click();
-          URL.revokeObjectURL(url);
+        <Button className="gap-2 w-full sm:w-auto" onClick={async () => {
+          const columns = [
+            { header: "Transaction ID", key: "id", width: 18 },
+            { header: "Date & Time", key: "date", width: 20 },
+            { header: "Event", key: "event", width: 16 },
+            { header: "Items", key: "items", width: 10 },
+            { header: "Amount", key: "amount", width: 12 },
+            { header: "Payment", key: "payment", width: 12 },
+            { header: "Cashier", key: "cashier", width: 14 },
+            { header: "Name", key: "customerName", width: 14 },
+            { header: "Year", key: "yearLevel", width: 10 },
+          ];
+          const rows = filtered.map(r => ({
+            id: r.id,
+            date: r.date,
+            event: r.event,
+            items: r.items,
+            amount: r.amount,
+            payment: r.payment,
+            cashier: r.cashier,
+            customerName: r.customerName || "",
+            yearLevel: r.yearLevel || "",
+          }));
+          const subtitle = `Event: ${currentEventName || "All"} • Exported: ${new Date().toLocaleString()}${(dateFrom||dateTo)?` • Range: ${dateFrom || "start"} to ${dateTo || "now"}`:""}`;
+          await exportExcel({ filename: `transactions_${Date.now()}`, title: "Transactions", columns, rows, subtitle, includeTitleColumn: false, currencyKeys: ["amount"], dateKeys: ["date"], autoFit: false });
         }}>
           <Download size={18} />
-          <span className="hidden sm:inline">Export Report</span>
+          <span className="hidden sm:inline">Export Excel</span>
           <span className="sm:hidden">Export</span>
         </Button>
       </div>
@@ -301,9 +330,10 @@ const Transactions = () => {
                 <Badge variant={txn.payment === "Cash" ? "default" : "outline"} className="text-[10px]">
                   {txn.payment}
                 </Badge>
+                {txn.yearLevel && <Badge variant="outline" className="text-[10px]">{txn.yearLevel}</Badge>}
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{txn.items} items • {txn.cashier}</span>
+                <span>{txn.items} items • {txn.cashier}{txn.customerName ? ` • ${txn.customerName}` : ""}</span>
                 <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => { setSelectedTxn(txn.raw); setIsDetailsOpen(true); }}>
                   <Receipt size={14} className="mr-1" />
                   View
@@ -325,6 +355,8 @@ const Transactions = () => {
                 <th className="text-left py-3 px-4 text-sm font-medium">Amount</th>
                 <th className="text-left py-3 px-4 text-sm font-medium">Payment</th>
                 <th className="text-left py-3 px-4 text-sm font-medium">Cashier</th>
+                <th className="text-left py-3 px-4 text-sm font-medium">Name</th>
+                <th className="text-left py-3 px-4 text-sm font-medium">Year</th>
                 <th className="text-right py-3 px-4 text-sm font-medium">Action</th>
               </tr>
             </thead>
@@ -344,6 +376,8 @@ const Transactions = () => {
                     </Badge>
                   </td>
                   <td className="py-3 px-4">{txn.cashier}</td>
+                  <td className="py-3 px-4">{txn.customerName}</td>
+                  <td className="py-3 px-4">{txn.yearLevel}</td>
                   <td className="py-3 px-4 text-right">
                     <Button variant="ghost" size="sm" onClick={() => { setSelectedTxn(txn.raw); setIsDetailsOpen(true); }}>
                       <Receipt size={16} className="mr-2" />

@@ -18,6 +18,8 @@ export interface Transaction {
   total: number;
   paymentMethod?: string;
   cashier?: string;
+  customerName?: string;
+  yearLevel?: "1st Year" | "2nd Year" | "3rd Year" | "4th Year";
   createdAt?: string;
 }
 
@@ -26,7 +28,25 @@ export const transactionService = {
     try {
       const now = new Date().toISOString();
       const newRef = push(ref(database, "transactions"));
-      await set(newRef, { ...transaction, createdAt: now });
+      const items = (transaction.items || []).map((it) => ({
+        productId: String(it.productId),
+        name: it.name,
+        price: Number(it.price || 0),
+        quantity: Number(it.quantity || 0),
+        ...(it.sku ? { sku: it.sku } : {}),
+      }));
+      const payload: Record<string, unknown> = {
+        eventId: transaction.eventId ?? null,
+        items,
+        subtotal: Number(transaction.subtotal || 0),
+        total: Number(transaction.total || 0),
+        createdAt: now,
+      };
+      if (transaction.paymentMethod) payload.paymentMethod = transaction.paymentMethod;
+      if (transaction.cashier) payload.cashier = transaction.cashier;
+      if (transaction.customerName) payload.customerName = transaction.customerName;
+      if (transaction.yearLevel) payload.yearLevel = transaction.yearLevel;
+      await set(newRef, payload);
       await Promise.all(
         transaction.items.map(async (it) => {
           if (transaction.eventId) {

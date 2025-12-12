@@ -59,10 +59,10 @@ export const authService = {
         createdAt: new Date().toISOString(),
       };
 
-      // Save to Firebase Realtime Database
+     
       await set(ref(database, `users/${user.uid}`), userData);
 
-      // Step 3: Also send to backend for additional processing (optional)
+   
       try {
         await fetch(`${API_URL}/auth/register`, {
           method: "POST",

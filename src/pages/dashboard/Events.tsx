@@ -227,7 +227,7 @@ const Events = () => {
                   {detailsTxns.map((t: any) => (
                     <div key={t.id} className="flex items-center justify-between text-sm">
                       <span className="font-mono">{t.id}</span>
-                      <span>₱{t.total} • {t.items?.length || 0} items</span>
+                      <span>₱{t.total} • {t.items?.length || 0} items{t.customerName ? ` • ${t.customerName}` : ""}{t.yearLevel ? ` • ${t.yearLevel}` : ""}</span>
                     </div>
                   ))}
                 </div>

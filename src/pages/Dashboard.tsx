@@ -9,7 +9,6 @@ import Events from "./dashboard/Events";
 import Transactions from "./dashboard/Transactions";
 import Revenue from "./dashboard/Revenue";
 import SalesAnalytics from "./dashboard/SalesAnalytics";
-import EventComparison from "./dashboard/EventComparison";
 import Forecasting from "./dashboard/Forecasting";
 import Reports from "./dashboard/Reports";
 import Team from "./dashboard/Team";
@@ -40,7 +39,6 @@ const Dashboard = () => {
           {activeSection === "transactions" && <Transactions />}
           {activeSection === "revenue" && <Revenue />}
           {activeSection === "sales-analytics" && <SalesAnalytics />}
-          {activeSection === "comparison" && <EventComparison />}
           {activeSection === "forecasting" && <Forecasting />}
           {activeSection === "reports" && <Reports />}
           {activeSection === "team" && <Team />}

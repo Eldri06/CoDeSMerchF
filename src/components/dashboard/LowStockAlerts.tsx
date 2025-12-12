@@ -1,76 +1,183 @@
-import { useEffect, useMemo, useState } from "react";
-import { Card } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { TrendingUp, Package, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Package, AlertTriangle } from "lucide-react";
-import { database } from "@/config/firebase";
-import { onValue, ref } from "firebase/database";
 
-const LowStockAlerts = () => {
-  const [products, setProducts] = useState<Array<{ id?: string; name?: string; stock?: number; reorderLevel?: number }>>([]);
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  unitsSold: number;
+  revenue: number;
+  stock: number;
+  trend: number;
+}
+
+// Mock data - replace with Firebase
+const mockProducts: Product[] = [
+  {
+    id: "1",
+    name: "CoDeS T-Shirt - Blue",
+    category: "Shirts",
+    unitsSold: 89,
+    revenue: 17800,
+    stock: 45,
+    trend: 23
+  },
+  {
+    id: "2",
+    name: "CoDeS Lanyard",
+    category: "Accessories",
+    unitsSold: 156,
+    revenue: 7800,
+    stock: 120,
+    trend: 18
+  },
+  {
+    id: "3",
+    name: "CoDeS Keychain",
+    category: "Accessories",
+    unitsSold: 143,
+    revenue: 7150,
+    stock: 89,
+    trend: 15
+  },
+  {
+    id: "4",
+    name: "CoDeS Sticker Pack",
+    category: "Stickers",
+    unitsSold: 234,
+    revenue: 4680,
+    stock: 200,
+    trend: 34
+  },
+  {
+    id: "5",
+    name: "CoDeS Mug",
+    category: "Drinkware",
+    unitsSold: 67,
+    revenue: 10050,
+    stock: 33,
+    trend: 12
+  }
+];
+
+interface TopProductsProps {
+  onNavigate?: (section: string) => void;
+}
+
+const TopProducts = ({ onNavigate }: TopProductsProps) => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const r = ref(database, "products");
-    const unsub = onValue(r, (snap) => {
-      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
-      const list = Object.entries(obj).map(([id, p]) => ({ ...(p as any), id }));
-      setProducts(list);
-    });
-    return () => unsub();
+    fetchTopProducts();
   }, []);
 
-  const lowStockItems = useMemo(() => {
-    return products
-      .filter((p) => Number(p.stock || 0) <= Number(p.reorderLevel ?? 10))
-      .sort((a, b) => Number(a.stock || 0) - Number(b.stock || 0))
-      .slice(0, 6)
-      .map((p) => ({ name: p.name || String(p.id || ""), stock: Number(p.stock || 0), reorder: Number(p.reorderLevel ?? 10) }));
-  }, [products]);
+  const fetchTopProducts = async () => {
+    setIsLoading(true);
+    try {
+      // TODO: Replace with Firebase query
+      // const data = await getTopProducts();
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setProducts(mockProducts);
+    } catch (error) {
+      console.error("Error fetching top products:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  if (lowStockItems.length === 0) {
-    return (
-      <Card className="p-8 glass-card border-border/50 text-center">
-        <Package size={48} className="mx-auto text-accent mb-4" />
-        <h3 className="text-lg font-semibold mb-2">All items are well stocked!</h3>
-        <p className="text-sm text-muted-foreground">No low stock alerts at this time.</p>
-      </Card>
-    );
-  }
+  const getStockStatus = (stock: number) => {
+    if (stock <= 5) return { color: "destructive", label: "Critical" };
+    if (stock <= 20) return { color: "warning", label: "Low" };
+    return { color: "success", label: "In Stock" };
+  };
 
   return (
-    <Card className="p-6 glass-card border-border/50">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-          <AlertTriangle size={20} className="text-amber-500" />
-        </div>
+    <Card className="bg-card/50 backdrop-blur border-border/50">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div>
-          <h3 className="text-lg font-semibold">Low Stock Alerts</h3>
-          <p className="text-sm text-muted-foreground">{lowStockItems.length} items need restocking</p>
+          <CardTitle className="text-xl font-bold">Top Products</CardTitle>
+          <CardDescription className="flex items-center gap-2 mt-1">
+            <Package size={14} />
+            Best selling items this event
+          </CardDescription>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {lowStockItems.map((item, index) => (
-          <div key={index} className="p-4 rounded-xl border-l-4 border-amber-500 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
-            <div className="flex items-start gap-3">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted text-xs">
-                {item.name.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm mb-1 truncate">{item.name}</p>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">
-                    <span className="text-amber-500 font-semibold">{item.stock} units</span> left
-                  </p>
-                  <p className="text-xs text-muted-foreground">Reorder at: {item.reorder}</p>
-                </div>
-                <Button size="sm" variant="outline" className="mt-3 w-full text-xs border-amber-500/30 hover:border-amber-500 hover:bg-amber-500/10">Restock Now</Button>
-              </div>
-            </div>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => onNavigate?.("products")}
+          className="gap-2"
+        >
+          View All
+          <ArrowUpRight size={14} />
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-20 bg-muted/20 rounded-lg animate-pulse" />
+            ))}
           </div>
-        ))}
-      </div>
+        ) : (
+          <div className="space-y-3">
+            {products.map((product, index) => {
+              const stockStatus = getStockStatus(product.stock);
+              return (
+                <div 
+                  key={product.id}
+                  className="flex items-center gap-4 p-4 rounded-lg bg-background/50 border border-border/50 hover:border-primary/30 transition-all cursor-pointer group"
+                  onClick={() => onNavigate?.("products")}
+                >
+                  {/* Rank */}
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg flex-shrink-0 ${
+                    index === 0 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' :
+                    index === 1 ? 'bg-gray-400/20 text-gray-400 border border-gray-400/30' :
+                    index === 2 ? 'bg-orange-500/20 text-orange-500 border border-orange-500/30' :
+                    'bg-muted/50 text-muted-foreground'
+                  }`}>
+                    {index + 1}
+                  </div>
+
+                  {/* Product Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                        {product.name}
+                      </p>
+                      <Badge variant="outline" className="text-xs">
+                        {product.category}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>{product.unitsSold} sold</span>
+                      <span className="text-primary font-medium">₱{product.revenue.toLocaleString()}</span>
+                      <Badge 
+                        variant={stockStatus.color as any}
+                        className="text-xs"
+                      >
+                        {product.stock} {stockStatus.label}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Trend */}
+                  <div className="flex items-center gap-1 text-success font-medium text-sm flex-shrink-0">
+                    <TrendingUp size={16} />
+                    +{product.trend}%
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 };
 
-export default LowStockAlerts;
+export default TopProducts;

@@ -139,4 +139,21 @@ export const authService = {
   isAuthenticated(): boolean {
     return !!this.getCurrentUser();
   },
+
+  async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const json = await res.json().catch(() => ({}));
+      return {
+        success: !!json.success,
+        message: String(json.message || "If the email exists, a reset link has been sent"),
+      };
+    } catch {
+      return { success: true, message: "If the email exists, a reset link has been sent" };
+    }
+  },
 };

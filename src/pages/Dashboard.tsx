@@ -10,7 +10,6 @@ import Transactions from "./dashboard/Transactions";
 import Revenue from "./dashboard/Revenue";
 import SalesAnalytics from "./dashboard/SalesAnalytics";
 import Forecasting from "./dashboard/Forecasting";
-import Reports from "./dashboard/Reports";
 import Team from "./dashboard/Team";
 import Settings from "./dashboard/Settings";
 import { useEffect } from "react";
@@ -56,7 +55,6 @@ const Dashboard = () => {
           {activeSection === "revenue" && <Revenue />}
           {activeSection === "sales-analytics" && <SalesAnalytics />}
           {activeSection === "forecasting" && <Forecasting />}
-          {activeSection === "reports" && <Reports />}
           {activeSection === "team" && <Team />}
           {activeSection === "settings" && <Settings />}
         </main>

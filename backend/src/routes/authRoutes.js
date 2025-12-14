@@ -293,6 +293,27 @@ router.post('/reject', verifyToken, requireSuperAdmin, async (req, res) => {
   }
 });
 
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+    let link = '';
+    try {
+      link = await auth.generatePasswordResetLink(String(email).trim().toLowerCase());
+    } catch (e) {}
+    try {
+      if (link) {
+        await sendEmail({ to: email, subject: 'CoDeSMerch: Reset Password', text: `Use this link to reset your password: ${link}` });
+      }
+    } catch {}
+    return res.json({ success: true, message: 'If the email exists, a reset link has been sent' });
+  } catch (error) {
+    return res.json({ success: true, message: 'If the email exists, a reset link has been sent' });
+  }
+});
+
 router.post('/admin/delete-user', async (req, res) => {
   try {
     const headerKey = req.headers['x-admin-key'];

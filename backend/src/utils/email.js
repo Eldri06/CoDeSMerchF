@@ -1,4 +1,3 @@
-const nodemailer = require('nodemailer');
 let sgMail;
 try {
   sgMail = require('@sendgrid/mail');
@@ -7,6 +6,12 @@ try {
 function getSmtpTransport() {
   const useSmtp = String(process.env.USE_SMTP || '').toLowerCase() === 'true';
   if (!useSmtp) return null;
+  let nodemailer;
+  try {
+    nodemailer = require('nodemailer');
+  } catch {
+    return null;
+  }
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 587);
   const secure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';

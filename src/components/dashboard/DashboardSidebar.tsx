@@ -2,6 +2,7 @@ import { Home, ShoppingCart, Package, Warehouse, Calendar, Receipt, DollarSign, 
 import codesLogo from "@/assets/codes-logo.png";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { authService } from "@/services/authService";
 
 interface DashboardSidebarProps {
   activeSection: string;
@@ -48,7 +49,6 @@ const navStructure = [
   {
     section: "Management",
     items: [
-      { id: "reports", icon: FileText, label: "Reports" },
       { id: "team", icon: Users, label: "Team" },
       { id: "settings", icon: Settings, label: "Settings" },
     ]
@@ -82,14 +82,26 @@ const SidebarContent = ({
 
     {/* Navigation */}
     <nav className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 md:space-y-6">
-      {navStructure.map((section) => (
-        <div key={section.section}>
-          {!collapsed && (
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
-              {section.section}
-            </h3>
-          )}
-          <div className="space-y-1">
+      {(() => {
+        const current = authService.getCurrentUser();
+        const roleLc = String(current?.systemRole || "").toLowerCase() || "member";
+        const memberAllowed = new Set(["dashboard", "products", "events"]);
+        const filterItem = (id: string) => {
+          if (roleLc === "member") return memberAllowed.has(id);
+          return true;
+        };
+        const filtered = navStructure.map((section) => ({
+          ...section,
+          items: section.items.filter((i) => filterItem(i.id)).filter((i) => (i.id === "team" ? roleLc !== "member" : true)),
+        })).filter((s) => s.items.length > 0);
+        return filtered.map((section) => (
+          <div key={section.section}>
+            {!collapsed && (
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
+                {section.section}
+              </h3>
+            )}
+            <div className="space-y-1">
             {section.items.map((item) => {
               const Icon = item.icon;
               const isActive = activeSection === item.id;
@@ -127,9 +139,10 @@ const SidebarContent = ({
                 </button>
               );
             })}
+            </div>
           </div>
-        </div>
-      ))}
+        ));
+      })()}
     </nav>
 
     {/* User Info */}

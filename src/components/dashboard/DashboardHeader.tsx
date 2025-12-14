@@ -2,9 +2,15 @@ import { Bell, Search, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEventContext } from "@/context/EventContext";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useState } from "react";
+import { authService } from "@/services/authService";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const DashboardHeader = () => {
   const { currentEventName, currentEventId, events, setEvent, refreshEvents } = useEventContext();
+  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
   return (
     <header className="h-14 md:h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-3 md:px-6 z-10">
       {/* Search Bar */}
@@ -15,6 +21,15 @@ const DashboardHeader = () => {
             type="text"
             placeholder="Search..."
             className="w-full pl-9 pr-3 py-2 bg-background/50 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const detail = { section: "products", productSearch: query } as any;
+                window.dispatchEvent(new CustomEvent("dashboard:navigate", { detail }));
+                navigate("/dashboard");
+              }
+            }}
           />
         </div>
       </div>
@@ -45,23 +60,44 @@ const DashboardHeader = () => {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative h-9 w-9" title="Notifications">
-          <Bell size={18} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full"></span>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative h-9 w-9" title="Notifications">
+              <Bell size={18} />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full"></span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>Welcome to CoDeSMerch</DropdownMenuItem>
+            <DropdownMenuItem>No new notifications</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        {/* User Profile - Simplified on mobile */}
-        <Button variant="ghost" className="gap-1 md:gap-2 pl-1 md:pl-2 h-9">
-          <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-xs">
-            CO
-          </div>
-          <div className="hidden md:block text-left">
-            <p className="text-sm font-medium leading-none">CoDeS Officer</p>
-            <p className="text-xs text-muted-foreground">Admin</p>
-          </div>
-          <ChevronDown size={14} className="text-muted-foreground hidden sm:block" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="gap-1 md:gap-2 pl-1 md:pl-2 h-9">
+              <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-xs">
+                CO
+              </div>
+              <div className="hidden md:block text-left">
+                <p className="text-sm font-medium leading-none">CoDeS Officer</p>
+                <p className="text-xs text-muted-foreground">Admin</p>
+              </div>
+              <ChevronDown size={14} className="text-muted-foreground hidden sm:block" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={async () => {
+              await authService.logout();
+              toast.success("Logged out");
+              navigate("/login");
+            }}>Logout</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

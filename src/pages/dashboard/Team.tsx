@@ -98,13 +98,23 @@ const Team = () => {
   };
 
   const current = authService.getCurrentUser();
-  const canSee = String(current?.systemRole || "").toLowerCase() === "super_admin";
+  const roleLc = String(current?.systemRole || "").toLowerCase();
+  const allowed = new Set([
+    "super_admin",
+    "president",
+    "vice_president",
+    "officer",
+    "secretary",
+    "treasurer",
+    "pio",
+  ]);
+  const canSee = allowed.has(roleLc);
 
   if (!canSee) {
     return (
       <Card className="p-8 text-center">
         <ShieldAlert className="mx-auto mb-3 text-muted-foreground" size={32} />
-        <p className="text-muted-foreground">Team dashboard is available to the President only</p>
+        <p className="text-muted-foreground">Not authorized to view the Team dashboard</p>
       </Card>
     );
   }

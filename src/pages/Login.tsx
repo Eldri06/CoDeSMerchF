@@ -187,7 +187,20 @@ const Login = () => {
                   Remember me
                 </label>
               </div>
-              <a href="#" className="text-sm text-primary hover:underline">
+              <a
+                href="#"
+                className="text-sm text-primary hover:underline"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  const preset = formData.email.trim();
+                  const input = preset || window.prompt("Enter your email");
+                  if (!input) return;
+                  setIsLoading(true);
+                  const res = await authService.forgotPassword(input.trim());
+                  toast.success(res.message);
+                  setIsLoading(false);
+                }}
+              >
                 Forgot Password?
               </a>
             </div>

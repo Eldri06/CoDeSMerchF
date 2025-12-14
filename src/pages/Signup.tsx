@@ -57,9 +57,15 @@ const Signup = () => {
       return;
     }
 
-    if (!formData.email.endsWith("@umindanao.edu.ph")) {
-      toast.error("Please use your UMTC email address");
-      return;
+    const envDomains = (import.meta.env.VITE_ALLOWED_EMAIL_DOMAINS || '').split(',').map((d: string) => d.trim().toLowerCase()).filter(Boolean);
+    const allowAll = envDomains.includes('*') || envDomains.length === 0;
+    if (!allowAll) {
+      const allowedDomains = envDomains;
+      const emailOk = allowedDomains.some((d: string) => formData.email.toLowerCase().endsWith(`@${d}`));
+      if (!emailOk) {
+        toast.error(`Please use your ${allowedDomains.join(' or ')} email`);
+        return;
+      }
     }
 
     if (formData.password.length < 6) {

@@ -31,75 +31,39 @@ interface UserData {
   organization?: string;
   department?: string;
   createdAt: string;
+  status?: string;
+  systemRole?: string;
+  requestedRole?: string;
 }
 
 export const authService = {
   // Register new user
   async register(data: RegisterData): Promise<{ success: boolean; message: string; user?: UserData }> {
     try {
-      // Step 1: Create Firebase Auth user
-      const userCredential = await createUserWithEmailAndPassword(
-        auth, 
-        data.email, 
-        data.password
-      );
-      
-      const user = userCredential.user;
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          fullName: data.fullName,
+          role: data.role,
+          studentId: data.studentId,
+          phone: data.phone,
+        }),
+      });
 
-      // Step 2: Create user profile in Realtime Database
-      const userData: UserData = {
-        uid: user.uid,
-        email: data.email,
-        fullName: data.fullName,
-        role: data.role,
-        studentId: data.studentId,
-        phone: data.phone || "",
-        organization: data.organization || "Computer Debuggers Society",
-        department: data.department || "Department of Computing Education",
-        createdAt: new Date().toISOString(),
-      };
-
-     
-      await set(ref(database, `users/${user.uid}`), userData);
-
-   
-      try {
-        await fetch(`${API_URL}/auth/register`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            uid: user.uid,
-            ...userData,
-          }),
-        });
-      } catch (backendError) {
-        console.warn("Backend registration failed, but Firebase succeeded:", backendError);
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        return { success: false, message: json.error || "Registration failed. Please try again." };
       }
 
       return {
         success: true,
-        message: "Registration successful!",
-        user: userData,
+        message: String(json.message || "Registration successful!"),
       };
-    } catch (error: any) {
-      console.error("Registration error:", error);
-      
-      let errorMessage = "Registration failed. Please try again.";
-      
-      if (error.code === "auth/email-already-in-use") {
-        errorMessage = "This email is already registered.";
-      } else if (error.code === "auth/invalid-email") {
-        errorMessage = "Invalid email address.";
-      } else if (error.code === "auth/weak-password") {
-        errorMessage = "Password should be at least 6 characters.";
-      }
-
-      return {
-        success: false,
-        message: errorMessage,
-      };
+    } catch (e) {
+      return { success: false, message: "Registration failed. Please try again." };
     }
   },
 
@@ -119,6 +83,12 @@ export const authService = {
       }
 
       const userData = snapshot.val() as UserData;
+
+      const status = String(userData.status || '').toLowerCase();
+      if (status !== 'active') {
+        const msg = status === 'pending' ? 'Approval is needed' : 'Account is not active';
+        return { success: false, message: msg };
+      }
 
       // Step 3: Store user data in localStorage
       localStorage.setItem("user", JSON.stringify(userData));

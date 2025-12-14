@@ -1,222 +1,206 @@
-import { Users, Plus, Mail, Phone, Shield } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Users, Check, X, Clock, ShieldAlert } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { database, auth } from "@/config/firebase";
+import { onValue, ref } from "firebase/database";
+import { authService } from "@/services/authService";
+import { toast } from "sonner";
+
+type MemberStatus = "approved" | "pending";
+type Role = string;
+
+interface TeamMember {
+  uid: string;
+  name: string;
+  email: string;
+  role: Role;
+  status: MemberStatus;
+  requestedRole?: string;
+}
 
 const Team = () => {
-  const teamMembers = [
-    {
-      name: "Juan Dela Cruz",
-      email: "juan.delacruz@umtc.edu.ph",
-      phone: "+63 912 345 6789",
-      role: "President",
-      systemRole: "Super Admin",
-      status: "Active",
-      lastActive: "2 hours ago",
-      stats: { transactions: 45, events: 3 },
-    },
-    {
-      name: "Maria Santos",
-      email: "maria.santos@umtc.edu.ph",
-      phone: "+63 923 456 7890",
-      role: "Business Manager",
-      systemRole: "Admin",
-      status: "Active",
-      lastActive: "5 minutes ago",
-      stats: { transactions: 89, events: 5 },
-    },
-    {
-      name: "Pedro Reyes",
-      email: "pedro.reyes@umtc.edu.ph",
-      phone: "+63 934 567 8901",
-      role: "Cashier",
-      systemRole: "Cashier",
-      status: "Active",
-      lastActive: "Online now",
-      stats: { transactions: 156, events: 2 },
-    },
-    {
-      name: "Ana Garcia",
-      email: "ana.garcia@umtc.edu.ph",
-      phone: "+63 945 678 9012",
-      role: "Inventory Officer",
-      systemRole: "Manager",
-      status: "Active",
-      lastActive: "1 day ago",
-      stats: { transactions: 0, events: 4 },
-    },
-  ];
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-  const getRoleColor = (role: string) => {
+  useEffect(() => {
+    const r = ref(database, "users");
+    const unsub = onValue(r, (snap) => {
+      const list: TeamMember[] = [];
+      snap.forEach((c) => {
+        const v = c.val() as any;
+        const statusRaw = String(v.status || "").toLowerCase();
+        const isPending = statusRaw === "pending";
+        list.push({
+          uid: c.key!,
+          name: String(v.fullName || v.name || ""),
+          email: String(v.email || ""),
+          role: String(v.role || "member"),
+          status: isPending ? "pending" : "approved",
+          requestedRole: String(v.requestedRole || ""),
+        });
+      });
+      setMembers(list);
+    });
+    return () => unsub();
+  }, []);
+
+  const pendingMembers = useMemo(() => members.filter(m => m.status === "pending"), [members]);
+  const approvedMembers = useMemo(() => members.filter(m => m.status === "approved"), [members]);
+
+  const handleApprove = async (uid: string, grantedRole?: string) => {
+    try {
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) throw new Error("Missing token");
+      const res = await fetch(`${API_URL}/auth/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ uid, grantedRole }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Approve failed");
+      }
+      toast.success("Approval granted");
+    } catch (e: any) {
+      toast.error(e.message || "Approve failed");
+    }
+  };
+
+  const handleReject = async (uid: string) => {
+    try {
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) throw new Error("Missing token");
+      const res = await fetch(`${API_URL}/auth/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ uid }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Reject failed");
+      }
+      toast.success("Rejected and set to member");
+    } catch (e: any) {
+      toast.error(e.message || "Reject failed");
+    }
+  };
+
+  const getRoleBadgeVariant = (role: Role) => {
     switch (role) {
-      case "Super Admin": return "destructive";
-      case "Admin": return "default";
-      case "Manager": return "secondary";
+      case "Vice President": return "default";
+      case "Secretary": return "secondary";
+      case "Treasurer": return "secondary";
       default: return "outline";
     }
   };
 
+  const current = authService.getCurrentUser();
+  const canSee = String(current?.systemRole || "").toLowerCase() === "super_admin";
+
+  if (!canSee) {
+    return (
+      <Card className="p-8 text-center">
+        <ShieldAlert className="mx-auto mb-3 text-muted-foreground" size={32} />
+        <p className="text-muted-foreground">Team dashboard is available to the President only</p>
+      </Card>
+    );
+  }
+
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">Team Management</h1>
-          <p className="text-sm md:text-base text-muted-foreground">Manage CoDeS officers and their access</p>
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold mb-1">Team</h1>
+        <p className="text-sm text-muted-foreground">Manage CoDeS officers and approvals</p>
+      </div>
+
+      {/* Pending Approvals Section */}
+      {pendingMembers.length > 0 && (
+        <Card className="p-4 md:p-6 border-warning/30 bg-warning/5">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock size={18} className="text-warning" />
+            <h2 className="font-semibold">Pending Approvals ({pendingMembers.length})</h2>
+          </div>
+          <div className="space-y-3">
+            {pendingMembers.map((member) => (
+              <div 
+                key={member.uid} 
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-background/50 border"
+              >
+                <div className="flex items-center gap-3">
+                  <Avatar className="w-10 h-10">
+                    <AvatarFallback className="text-xs font-bold bg-gradient-to-br from-primary to-secondary text-primary-foreground">
+                      {member.name.split(" ").map(n => n[0]).join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium text-sm">{member.name}</p>
+                    <p className="text-xs text-muted-foreground">{member.email}</p>
+                    <Badge variant="outline" className="mt-1 text-[10px]">{member.requestedRole || member.role}</Badge>
+                  </div>
+                </div>
+                <div className="flex gap-2 ml-auto sm:ml-0">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="h-8 gap-1.5 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    onClick={() => handleReject(member.uid)}
+                  >
+                    <X size={14} />
+                    Reject
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="h-8 gap-1.5"
+                    onClick={() => handleApprove(member.uid, member.requestedRole)}
+                  >
+                    <Check size={14} />
+                    Approve
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Team Members List */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Users size={18} className="text-primary" />
+          <h2 className="font-semibold">Team Members ({approvedMembers.length})</h2>
         </div>
-        <Button className="gap-2 w-full sm:w-auto">
-          <Plus size={18} />
-          Invite User
-        </Button>
-      </div>
-
-      {/* Stat Cards - 2x2 grid on mobile */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
-        <Card className="p-3 md:p-6">
-          <div className="w-9 h-9 md:w-12 md:h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-2 md:mb-4">
-            <Users className="text-primary" size={18} />
-          </div>
-          <h3 className="text-lg md:text-2xl font-bold mb-0.5 md:mb-1">{teamMembers.length}</h3>
-          <p className="text-xs md:text-sm text-muted-foreground">Team Members</p>
-        </Card>
-
-        <Card className="p-3 md:p-6">
-          <div className="w-9 h-9 md:w-12 md:h-12 rounded-lg bg-success/10 flex items-center justify-center mb-2 md:mb-4">
-            <Shield className="text-success" size={18} />
-          </div>
-          <h3 className="text-lg md:text-2xl font-bold mb-0.5 md:mb-1">2</h3>
-          <p className="text-xs md:text-sm text-muted-foreground">Administrators</p>
-        </Card>
-
-        <Card className="p-3 md:p-6">
-          <div className="w-9 h-9 md:w-12 md:h-12 rounded-lg bg-secondary/10 flex items-center justify-center mb-2 md:mb-4">
-            <Users className="text-secondary" size={18} />
-          </div>
-          <h3 className="text-lg md:text-2xl font-bold mb-0.5 md:mb-1">3</h3>
-          <p className="text-xs md:text-sm text-muted-foreground">Active Now</p>
-        </Card>
-
-        <Card className="p-3 md:p-6">
-          <div className="w-9 h-9 md:w-12 md:h-12 rounded-lg bg-warning/10 flex items-center justify-center mb-2 md:mb-4">
-            <Mail className="text-warning" size={18} />
-          </div>
-          <h3 className="text-lg md:text-2xl font-bold mb-0.5 md:mb-1">1</h3>
-          <p className="text-xs md:text-sm text-muted-foreground">Pending Invites</p>
-        </Card>
-      </div>
-
-      {/* Team Member Cards */}
-      <div className="grid grid-cols-1 gap-4 md:gap-6">
-        {teamMembers.map((member, index) => (
-          <Card key={index} className="p-4 md:p-6">
-            {/* Mobile Layout */}
-            <div className="md:hidden">
-              <div className="flex items-start gap-3 mb-3">
-                <Avatar className="w-12 h-12">
-                  <AvatarFallback className="text-sm font-bold bg-gradient-to-br from-primary to-secondary text-white">
+        
+        <div className="grid gap-3">
+          {approvedMembers.map((member) => (
+            <Card key={member.uid} className="p-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-10 h-10 md:w-12 md:h-12">
+                  <AvatarFallback className="text-xs md:text-sm font-bold bg-gradient-to-br from-primary to-secondary text-primary-foreground">
                     {member.name.split(" ").map(n => n[0]).join("")}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-base truncate">{member.name}</h3>
-                  <p className="text-xs text-muted-foreground">{member.role}</p>
-                  <div className="flex gap-1.5 mt-1.5">
-                    <Badge variant={getRoleColor(member.systemRole)} className="text-[10px]">
-                      {member.systemRole}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px]">{member.status}</Badge>
-                  </div>
+                  <p className="font-medium text-sm md:text-base truncate">{member.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{member.email}</p>
                 </div>
+                <Badge variant={getRoleBadgeVariant(member.role)} className="text-xs shrink-0">
+                  {member.role}
+                </Badge>
               </div>
-              
-              <div className="space-y-1.5 mb-3 text-xs">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Mail size={12} />
-                  <span className="truncate">{member.email}</span>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone size={12} />
-                  <span>{member.phone}</span>
-                </div>
-              </div>
+            </Card>
+          ))}
+        </div>
 
-              <div className="flex items-center justify-between pt-3 border-t">
-                <div className="flex gap-4 text-xs">
-                  <div>
-                    <p className="text-muted-foreground">Last Active</p>
-                    <p className="font-medium">{member.lastActive}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Trans.</p>
-                    <p className="font-bold">{member.stats.transactions}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Events</p>
-                    <p className="font-bold">{member.stats.events}</p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" className="h-7 text-xs">Edit</Button>
-              </div>
-            </div>
-
-            {/* Desktop Layout */}
-            <div className="hidden md:flex items-start gap-6">
-              <Avatar className="w-16 h-16">
-                <AvatarFallback className="text-lg font-bold bg-gradient-to-br from-primary to-secondary text-white">
-                  {member.name.split(" ").map(n => n[0]).join("")}
-                </AvatarFallback>
-              </Avatar>
-
-              <div className="flex-1">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="text-xl font-bold mb-1">{member.name}</h3>
-                    <p className="text-sm text-muted-foreground">{member.role}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Badge variant={getRoleColor(member.systemRole)}>
-                      {member.systemRole}
-                    </Badge>
-                    <Badge variant="outline">{member.status}</Badge>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail size={16} className="text-muted-foreground" />
-                    <span>{member.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone size={16} className="text-muted-foreground" />
-                    <span>{member.phone}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div className="flex gap-6">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Last Active</p>
-                      <p className="font-medium">{member.lastActive}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Transactions</p>
-                      <p className="font-bold">{member.stats.transactions}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Events</p>
-                      <p className="font-bold">{member.stats.events}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm">Activity Log</Button>
-                    <Button variant="outline" size="sm">Edit</Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {approvedMembers.length === 0 && (
+          <Card className="p-8 text-center">
+            <Users className="mx-auto mb-3 text-muted-foreground" size={32} />
+            <p className="text-muted-foreground">No team members yet</p>
           </Card>
-        ))}
+        )}
       </div>
     </div>
   );

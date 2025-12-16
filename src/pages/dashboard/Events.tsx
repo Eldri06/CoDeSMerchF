@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { eventService, EventItem } from "@/services/eventService";
-import { productService } from "@/services/productService";
+import { productService, Product } from "@/services/productService";
 import { transactionService, Transaction, TransactionItem } from "@/services/transactionService";
 import { useEventContext } from "@/context/EventContext";
 import { toast } from "sonner";
@@ -28,7 +28,7 @@ const Events = () => {
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [detailsTxns, setDetailsTxns] = useState<Transaction[]>([]);
-  const [detailsProducts, setDetailsProducts] = useState<EventItem[]>([]);
+  const [detailsProducts, setDetailsProducts] = useState<Product[]>([]);
   const { refreshEvents, setEvent } = useEventContext();
   const currentUser = authService.getCurrentUser();
   const roleLabel = String(currentUser?.role || currentUser?.systemRole || "member").toLowerCase();
@@ -212,7 +212,7 @@ const Events = () => {
       </Dialog>
 
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Event Details</DialogTitle>
           </DialogHeader>

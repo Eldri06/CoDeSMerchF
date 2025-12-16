@@ -45,6 +45,8 @@ import { database } from "@/config/firebase";
 import { createClient } from "@supabase/supabase-js";
 import { onValue, ref } from "firebase/database";
 import { useEventContext } from "@/context/EventContext";
+import { formatCurrency, getGeneralSettings } from "@/lib/utils";
+import { authService } from "@/services/authService";
 
 const Products = () => {
   const API_URL = `${window.location.protocol}//${window.location.hostname}:5000/api`;
@@ -70,6 +72,9 @@ const Products = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const { currentEventId, currentEventName } = useEventContext();
+  const currentUser = authService.getCurrentUser();
+  const roleLabel = String(currentUser?.systemRole || currentUser?.role || "member").trim().toLowerCase();
+  const canManage = roleLabel !== "member";
 
   // Form Data
   const [formData, setFormData] = useState({
@@ -223,33 +228,26 @@ const Products = () => {
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
       const path = `products/${safeSku}-${Date.now()}.${ext}`;
       const bucket = "product-images";
+      // Ensure bucket exists and is public (server-side)
+      try {
+        await fetch(`${API_URL}/storage/ensure-bucket`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bucketName: bucket, public: true }),
+        });
+      } catch { void 0; }
       const fd = new FormData();
       fd.append('file', file);
       fd.append('bucket', bucket);
       fd.append('path', path);
-      let url: string | undefined;
-      {
-        const lsUrl = localStorage.getItem('SUPABASE_URL') || localStorage.getItem('VITE_SUPABASE_URL') || import.meta.env.VITE_SUPABASE_URL || '';
-        const lsKey = localStorage.getItem('SUPABASE_ANON_KEY') || localStorage.getItem('VITE_SUPABASE_ANON_KEY') || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-        if (lsUrl && lsKey) {
-          const rt = createClient(lsUrl, lsKey);
-          const up = await rt.storage.from(bucket).upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true });
-          if (!up.error) {
-            const pub = rt.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-            url = pub || '';
-          }
-        } else {
-          toast.error('Supabase not configured. Set URL/key in Settings > Storage');
-        }
-      }
-      if (!url) {
-        toast.error('Image upload failed. Configure Supabase in Settings > Storage');
-      }
-      if (url) {
+      const resp = await fetch(`${API_URL}/storage/upload`, { method: 'POST', body: fd });
+      const payload = await resp.json();
+      if (!resp.ok || !payload.success) {
+        toast.error(`Upload failed: ${payload.error || resp.statusText}`);
+      } else {
+        const url = String(payload.url || '');
         setFormData({ ...formData, imageUrl: url, imagePath: path });
         toast.success("Image uploaded");
-      } else {
-        toast.error("Failed to upload image");
       }
     } catch (err) {
       toast.error("Failed to upload image");
@@ -275,33 +273,23 @@ const Products = () => {
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `products/${safeSku}-${Date.now()}.${ext}`;
       const bucket = 'product-images';
+      try {
+        await fetch(`${API_URL}/storage/ensure-bucket`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bucketName: bucket, public: true })
+        });
+      } catch { void 0; }
       const fd = new FormData();
       fd.append('file', file);
       fd.append('bucket', bucket);
       fd.append('path', path);
-      let url: string | undefined;
-      {
-        const lsUrl = localStorage.getItem('SUPABASE_URL') || localStorage.getItem('VITE_SUPABASE_URL') || import.meta.env.VITE_SUPABASE_URL || '';
-        const lsKey = localStorage.getItem('SUPABASE_ANON_KEY') || localStorage.getItem('VITE_SUPABASE_ANON_KEY') || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-        if (lsUrl && lsKey) {
-          const rt = createClient(lsUrl, lsKey);
-          const up = await rt.storage.from(bucket).upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true });
-          if (!up.error) {
-            const pub = rt.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-            url = pub || '';
-          }
-        } else {
-          toast.error('Supabase not configured. Set URL/key in Settings > Storage');
-        }
-      }
-      if (!url) {
-        toast.error('Image upload failed. Configure Supabase in Settings > Storage');
-      }
-      if (url) {
+      const resp = await fetch(`${API_URL}/storage/upload`, { method: 'POST', body: fd });
+      const payload = await resp.json();
+      if (!resp.ok || !payload.success) {
+        toast.error(`Upload failed: ${payload.error || resp.statusText}`);
+      } else {
+        const url = String(payload.url || '');
         setEditData((prev) => ({ ...prev, imageUrl: url, imagePath: path }));
         toast.success("Image uploaded");
-      } else {
-        toast.error("Failed to upload image");
       }
     } catch (err) {
       toast.error("Failed to upload image");
@@ -348,6 +336,7 @@ const Products = () => {
   };
 
   const handleAddProduct = async () => {
+    if (!canManage) { toast.error("You don't have permission to create products"); return; }
     console.log("🔵 Add Product button clicked!");
     
     if (!validateForm()) {
@@ -395,6 +384,7 @@ const Products = () => {
   };
 
   const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!canManage) { toast.error("You don't have permission to delete products"); return; }
     if (!confirm(`Are you sure you want to delete "${productName}"?`)) return;
 
     const result = await productService.deleteProduct(productId);
@@ -415,7 +405,7 @@ const Products = () => {
   const testButton = () => {
     console.log("TEST BUTTON CLICKED!");
     alert("Button works! Dialog state: " + isAddDialogOpen);
-    setIsAddDialogOpen(true);
+    if (canManage) setIsAddDialogOpen(true);
   };
 
   return (
@@ -426,18 +416,20 @@ const Products = () => {
           <p className="text-muted-foreground">Manage your CoDeS merchandise inventory</p>
         </div>
         
-        {/* FIXED: Button with explicit onClick */}
-        <Button 
-          className="gap-2" 
-          onClick={() => {
-            console.log("🟢 Add Product button clicked - opening dialog");
-            setIsAddDialogOpen(true);
-          }}
-          type="button"
-        >
-          <Plus size={20} />
-          Add Product
-        </Button>
+        {/* Create Product available only to non-member roles */}
+        {canManage && (
+          <Button 
+            className="gap-2" 
+            onClick={() => {
+              console.log("🟢 Add Product button clicked - opening dialog");
+              setIsAddDialogOpen(true);
+            }}
+            type="button"
+          >
+            <Plus size={20} />
+            Add Product
+          </Button>
+        )}
       </div>
 
       <Card className="p-6">
@@ -616,7 +608,7 @@ const Products = () => {
                 <TableHead>Items Sold</TableHead>
                 <TableHead>Revenue</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canManage && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
               <TableBody>
@@ -650,38 +642,46 @@ const Products = () => {
                       }`} />
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium">₱{product.price.toLocaleString()}</TableCell>
+                  <TableCell className="font-medium">{formatCurrency(product.price)}</TableCell>
                   <TableCell>{Number(itemsSoldByProduct[product.id || ""] || 0)}</TableCell>
-                  <TableCell>₱{Number(revenueByProduct[product.id || ""] || 0).toLocaleString()}</TableCell>
+                  <TableCell>{formatCurrency(Number(revenueByProduct[product.id || ""] || 0))}</TableCell>
                   <TableCell>
                     <Badge variant={product.status === "Active" ? "default" : "destructive"}>
                       {product.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" type="button">
-                          <MoreVertical size={16} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => { setSelectedProduct(product); setEditData({ name: product.name, sku: product.sku, category: product.category, price: product.price, cost: product.cost, reorderLevel: product.reorderLevel, maxStock: product.maxStock, status: product.status }); setIsEditOpen(true); }}>
-                          <Edit size={16} className="mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { setSelectedProduct(product); setIsDetailsOpen(true); }}>View Details</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { setSelectedProduct(product); setAdjustQty("0"); setAdjustMode("add"); setIsAdjustOpen(true); }}>Adjust Stock</DropdownMenuItem>
-                        <DropdownMenuItem 
-                          className="text-destructive"
-                          onClick={() => handleDeleteProduct(product.id!, product.name)}
-                        >
-                          <Trash2 size={16} className="mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+                  {canManage ? (
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" type="button">
+                            <MoreVertical size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => { setSelectedProduct(product); setEditData({ name: product.name, sku: product.sku, category: product.category, price: product.price, cost: product.cost, reorderLevel: product.reorderLevel, maxStock: product.maxStock, status: product.status }); setIsEditOpen(true); }}>
+                            <Edit size={16} className="mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setSelectedProduct(product); setIsDetailsOpen(true); }}>View Details</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setSelectedProduct(product); setAdjustQty("0"); setAdjustMode("add"); setIsAdjustOpen(true); }}>Adjust Stock</DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={() => handleDeleteProduct(product.id!, product.name)}
+                          >
+                            <Trash2 size={16} className="mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  ) : (
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" type="button" onClick={() => { setSelectedProduct(product); setIsDetailsOpen(true); }}>
+                        View Details
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -739,7 +739,7 @@ const Products = () => {
             </div>
 
             <div>
-              <Label htmlFor="price">Selling Price (₱) *</Label>
+              <Label htmlFor="price">Selling Price ({getGeneralSettings().currency === 'USD' ? '$' : '₱'}) *</Label>
               <Input
                 id="price"
                 name="price"
@@ -754,7 +754,7 @@ const Products = () => {
             </div>
 
             <div>
-              <Label htmlFor="cost">Cost Price (₱)</Label>
+              <Label htmlFor="cost">Cost Price ({getGeneralSettings().currency === 'USD' ? '$' : '₱'})</Label>
               <Input
                 id="cost"
                 name="cost"
@@ -860,7 +860,7 @@ const Products = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+      <Dialog open={isEditOpen && canManage} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Product</DialogTitle>
@@ -868,7 +868,7 @@ const Products = () => {
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <input ref={editFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleEditImageFileChange} />
-              <Button type="button" onClick={handleEditImagePick} disabled={uploadingEditImage}>
+              <Button type="button" onClick={handleEditImagePick} disabled={uploadingEditImage || !canManage}>
                 {uploadingEditImage ? "Uploading..." : (editData.imageUrl || selectedProduct?.imageUrl) ? "Change Image" : "Upload Image"}
               </Button>
               {(editData.imageUrl || selectedProduct?.imageUrl) && (
@@ -935,6 +935,7 @@ const Products = () => {
             <Button onClick={async () => {
               if (!selectedProduct?.id) return;
               const res = await productService.updateProduct(selectedProduct.id, editData);
+              if (!canManage) return;
               if (res.success) { setIsEditOpen(false); setSelectedProduct(null); await loadProducts(); }
             }}>Save</Button>
           </DialogFooter>
@@ -950,7 +951,7 @@ const Products = () => {
             <div className="flex justify-between"><span>Name</span><span className="font-medium">{selectedProduct?.name}</span></div>
             <div className="flex justify-between"><span>SKU</span><span className="font-medium">{selectedProduct?.sku}</span></div>
             <div className="flex justify-between"><span>Category</span><span className="font-medium">{selectedProduct?.category}</span></div>
-            <div className="flex justify-between"><span>Price</span><span className="font-medium">₱{Number(selectedProduct?.price || 0).toFixed(2)}</span></div>
+            <div className="flex justify-between"><span>Price</span><span className="font-medium">{formatCurrency(Number(selectedProduct?.price || 0))}</span></div>
             <div className="flex justify-between"><span>Stock</span><span className="font-medium">{Number(selectedProduct?.stock || 0)}</span></div>
             <div className="flex justify-between"><span>Status</span><span className="font-medium">{selectedProduct?.status}</span></div>
           </div>

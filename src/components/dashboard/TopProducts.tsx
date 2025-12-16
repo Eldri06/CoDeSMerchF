@@ -1,35 +1,54 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
 import { useEventContext } from "@/context/EventContext";
+import { formatCurrency } from "@/lib/utils";
+import { productService, type Product } from "@/services/productService";
 
 interface TopItem {
+  pid: string;
   name: string;
   sold: number;
   revenue: number;
   trend: number;
+  imageUrl?: string;
+  category?: string;
+  stock?: number;
 }
 
 const TopProducts = () => {
   const { currentEventId } = useEventContext();
-  const [txns, setTxns] = useState<Array<{ id?: string; items?: Array<{ productId: string; name: string; price: number; quantity: number }>; createdAt?: string; eventId?: string | null }>>([]);
+  type TxnShape = { id?: string; items?: Array<{ productId: string; name: string; price: number; quantity: number }>; createdAt?: string; eventId?: string | null };
+  const [txns, setTxns] = useState<TxnShape[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     const r = ref(database, "transactions");
     const unsub = onValue(r, (snap) => {
-      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
-      const list = Object.entries(obj).map(([id, t]) => ({ ...(t as any), id }));
+      const obj = snap.exists() ? (snap.val() as Record<string, TxnShape>) : {};
+      const list = Object.entries(obj).map(([id, t]) => ({ ...t, id }));
       const filtered = currentEventId ? list.filter((t) => (t.eventId ?? null) === currentEventId) : list;
       setTxns(filtered);
     });
     return () => unsub();
   }, [currentEventId]);
 
+  useEffect(() => {
+    (async () => {
+      const all = await productService.getAllProducts();
+      setProducts(all);
+    })();
+  }, []);
+
   const top = useMemo(() => {
-    const now = Date.now();
+    const latestMs = txns.reduce((m, t) => {
+      const ms = t.createdAt ? new Date(t.createdAt).getTime() : 0;
+      return ms > m ? ms : m;
+    }, 0);
+    const now = latestMs || Date.parse("2000-01-01T00:00:00Z");
     const winDays = 7;
     const prevStart = now - 14 * 24 * 60 * 60 * 1000;
     const prevEnd = now - 7 * 24 * 60 * 60 * 1000;
@@ -37,6 +56,7 @@ const TopProducts = () => {
     const mapSold: Record<string, number> = {};
     const mapRevenue: Record<string, number> = {};
     const mapName: Record<string, string> = {};
+    const mapPid: Record<string, string> = {};
     const curSoldWindow: Record<string, number> = {};
     const prevSoldWindow: Record<string, number> = {};
     txns.forEach((t) => {
@@ -45,6 +65,7 @@ const TopProducts = () => {
       items.forEach((it) => {
         const pid = String(it.productId || it.name);
         mapName[pid] = it.name;
+        mapPid[pid] = String(it.productId || pid);
         const qty = Number(it.quantity || 0);
         const rev = Number(it.price || 0) * qty;
         mapSold[pid] = (mapSold[pid] || 0) + qty;
@@ -53,15 +74,17 @@ const TopProducts = () => {
         if (ts >= prevStart && ts < prevEnd) prevSoldWindow[pid] = (prevSoldWindow[pid] || 0) + qty;
       });
     });
+    const byId: Record<string, Product> = Object.fromEntries(products.map((p) => [String(p.id || ""), p]));
     const items: TopItem[] = Object.keys(mapSold).map((pid) => {
       const cur = curSoldWindow[pid] || 0;
       const prev = prevSoldWindow[pid] || 0;
       const trend = prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 100);
-      return { name: mapName[pid] || pid, sold: mapSold[pid] || 0, revenue: mapRevenue[pid] || 0, trend };
+      const prod = byId[mapPid[pid]];
+      return { pid: mapPid[pid], name: mapName[pid] || pid, sold: mapSold[pid] || 0, revenue: mapRevenue[pid] || 0, trend, imageUrl: prod?.imageUrl, category: prod?.category, stock: prod?.stock };
     });
     items.sort((a, b) => b.sold - a.sold);
     return items.slice(0, 5);
-  }, [txns]);
+  }, [txns, products]);
 
   return (
     <Card className="p-6 glass-card border-border/50">
@@ -87,15 +110,19 @@ const TopProducts = () => {
             className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
             onClick={() => window.dispatchEvent(new CustomEvent("dashboard:navigate", { detail: { section: "products", productSearch: product.name } }))}
           >
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-xs">
-              {product.name.slice(0, 2).toUpperCase()}
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-muted overflow-hidden">
+              {product.imageUrl ? (
+                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs">{product.name.slice(0, 2).toUpperCase()}</span>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{product.name}</p>
-              <p className="text-xs text-muted-foreground">{product.sold} sold</p>
+              <p className="text-xs text-muted-foreground">{product.sold} sold • {product.category || ""}{typeof product.stock === 'number' ? ` • ${product.stock} In Stock` : ""}</p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-semibold">₱{product.revenue.toLocaleString()}</p>
+              <p className="text-sm font-semibold">{formatCurrency(product.revenue)}</p>
               <div className="flex items-center gap-1 justify-end">
                 {product.trend > 0 ? (
                   <TrendingUp size={12} className="text-accent" />

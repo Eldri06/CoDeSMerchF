@@ -81,7 +81,7 @@ const DashboardHeader = () => {
     if (!uid) return;
     const r = dbRef(database, `users/${uid}`);
     const unsub = onValue(r, (snap) => {
-      const v = snap.val() as any;
+      const v = snap.val() as Partial<typeof user> | null;
       if (!v) return;
       const merged = { ...user!, ...v };
       localStorage.setItem("user", JSON.stringify(merged));
@@ -96,8 +96,8 @@ const DashboardHeader = () => {
       setSaving(true);
       let avatarUrl: string | undefined;
       if (avatarFile) {
-        try {
-        } catch {}
+        try { void 0 }
+        catch { void 0 }
         try {
           const ext = (avatarFile.type || 'image/jpeg').includes('png') ? 'png' : (avatarFile.type || '').includes('webp') ? 'webp' : 'jpg';
           const path = `profiles/${user.uid}.${ext}`;
@@ -124,19 +124,19 @@ const DashboardHeader = () => {
               if (j.success && j.url) {
                 avatarUrl = String(j.url);
               }
-            } catch {}
+            } catch { void 0 }
           }
-        } catch {}
+        } catch { void 0 }
         if (!avatarUrl && avatarPreview) {
           avatarUrl = avatarPreview;
         }
       }
-      const updates: any = { fullName, phone };
+      const updates: { fullName?: string; phone?: string; avatarUrl?: string } = { fullName, phone };
       if (avatarUrl) updates.avatarUrl = avatarUrl;
       await update(dbRef(database, `users/${user.uid}`), updates);
       const newLocal = { ...user!, fullName, phone, ...(avatarUrl ? { avatarUrl } : {}) };
       localStorage.setItem("user", JSON.stringify(newLocal));
-      setUser(newLocal as any);
+      setUser(newLocal);
       toast.success("Profile updated");
       setProfileOpen(false);
     } catch (e) {
@@ -168,10 +168,10 @@ const DashboardHeader = () => {
 
       {/* Right Section */}
       <div className="flex items-center gap-1 md:gap-3">
-        {/* Event Selector - Hidden on mobile */}
+        {/* Event Selector */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="hidden sm:flex gap-2 border-border/50 hover:border-primary">
+            <Button variant="outline" className="flex gap-2 border-border/50 hover:border-primary h-9 px-2">
               <span className="text-sm font-medium">{currentEventName}</span>
               <ChevronDown size={16} />
             </Button>

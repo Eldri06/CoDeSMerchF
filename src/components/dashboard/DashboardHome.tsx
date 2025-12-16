@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import StatCard from "@/components/dashboard/StatCard";
 import RevenueChart from "@/components/dashboard/RevenueChart";
-import TopProducts from "@/components/dashboard/TopProducts";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
+import TopProducts from "@/components/dashboard/TopProducts";
 import LowStockAlerts from "@/components/dashboard/LowStockAlerts";
 import { DollarSign, ShoppingBag, Package, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,18 +10,21 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useEventContext } from "@/context/EventContext";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
+import { formatCurrency } from "@/lib/utils";
 
 const DashboardHome = () => {
   const [showChart, setShowChart] = useState(false);
   const { currentEventId } = useEventContext();
-  const [products, setProducts] = useState<Array<{ id?: string; price?: number; cost?: number; stock?: number; reorderLevel?: number }>>([]);
-  const [txns, setTxns] = useState<Array<{ id?: string; total?: number; createdAt?: string; eventId?: string | null }>>([]);
+  type ProductShape = { id?: string; price?: number; cost?: number; stock?: number; reorderLevel?: number; eventId?: string | null };
+  type TxnShape = { id?: string; total?: number; createdAt?: string; eventId?: string | null };
+  const [products, setProducts] = useState<ProductShape[]>([]);
+  const [txns, setTxns] = useState<TxnShape[]>([]);
 
   useEffect(() => {
     const r = ref(database, "products");
     const unsub = onValue(r, (snap) => {
-      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
-      const list = Object.entries(obj).map(([id, p]) => ({ ...(p as any), id }));
+      const obj = snap.exists() ? (snap.val() as Record<string, ProductShape>) : {};
+      const list = Object.entries(obj).map(([id, p]) => ({ ...p, id }));
       setProducts(list);
     });
     return () => unsub();
@@ -30,23 +33,26 @@ const DashboardHome = () => {
   useEffect(() => {
     const r = ref(database, "transactions");
     const unsub = onValue(r, (snap) => {
-      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
-      const list = Object.entries(obj).map(([id, t]) => ({ ...(t as any), id }));
+      const obj = snap.exists() ? (snap.val() as Record<string, TxnShape>) : {};
+      const list = Object.entries(obj).map(([id, t]) => ({ ...t, id }));
       const filtered = currentEventId ? list.filter((t) => (t.eventId ?? null) === currentEventId) : list;
       setTxns(filtered);
     });
     return () => unsub();
   }, [currentEventId]);
 
+  const eventProducts = useMemo(() => (
+    currentEventId ? products.filter((p) => (p.eventId ?? null) === currentEventId) : products
+  ), [products, currentEventId]);
   const totalRevenue = useMemo(() => txns.reduce((sum, t) => sum + Number(t.total || 0), 0), [txns]);
   const totalTransactions = useMemo(() => txns.length, [txns]);
   const avgTransaction = useMemo(() => (totalTransactions ? totalRevenue / totalTransactions : 0), [totalRevenue, totalTransactions]);
-  const totalUnits = useMemo(() => products.reduce((sum, p) => sum + Number(p.stock || 0), 0), [products]);
-  const lowStockCount = useMemo(() => products.filter((p) => Number(p.stock || 0) <= Number(p.reorderLevel ?? 10)).length, [products]);
-  const inventoryValue = useMemo(() => products.reduce((sum, p) => {
+  const totalUnits = useMemo(() => eventProducts.reduce((sum, p) => sum + Number(p.stock || 0), 0), [eventProducts]);
+  const lowStockCount = useMemo(() => eventProducts.filter((p) => Number(p.stock || 0) <= Number(p.reorderLevel ?? 10)).length, [eventProducts]);
+  const inventoryValue = useMemo(() => eventProducts.reduce((sum, p) => {
     const unitValue = p.cost ?? p.price ?? 0;
     return sum + Number(unitValue) * Number(p.stock || 0);
-  }, 0), [products]);
+  }, 0), [eventProducts]);
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -56,15 +62,15 @@ const DashboardHome = () => {
         <p className="text-sm md:text-base text-muted-foreground">Here's what's happening with CoDeSMerch today.</p>
       </div>
 
-      {/* Stats Overview - Responsive Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+      {/* Stats Overview - Horizontal on mobile, grid on larger screens */}
+      <div className="grid grid-flow-col auto-cols-[minmax(220px,1fr)] sm:grid-flow-row sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6 overflow-x-auto">
         <div className="flex items-start gap-3 md:gap-4 p-4 md:p-6 bg-gradient-to-br from-success/10 to-success/5 rounded-xl border border-success/20">
           <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl bg-success/20 flex items-center justify-center flex-shrink-0">
             <DollarSign className="text-success" size={20} />
           </div>
           <div className="min-w-0">
             <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Total Revenue</p>
-            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">₱{totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">{formatCurrency(Number(totalRevenue || 0))}</h3>
             <p className="text-xs md:text-sm text-success font-medium">↑ 12.5% vs last event</p>
           </div>
         </div>
@@ -76,7 +82,7 @@ const DashboardHome = () => {
           <div className="min-w-0">
             <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Transactions</p>
             <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">{totalTransactions.toLocaleString()}</h3>
-            <p className="text-xs md:text-sm text-muted-foreground">₱{avgTransaction.toFixed(2)} avg • <span className="text-primary">↑ 8.2%</span></p>
+            <p className="text-xs md:text-sm text-muted-foreground">{formatCurrency(avgTransaction)} avg • <span className="text-primary">↑ 8.2%</span></p>
           </div>
         </div>
 
@@ -86,7 +92,7 @@ const DashboardHome = () => {
           </div>
           <div className="min-w-0">
             <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Inventory Value</p>
-            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">₱{inventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+            <h3 className="text-xl md:text-3xl font-bold text-foreground mb-0.5 md:mb-1">{formatCurrency(Number(inventoryValue || 0))}</h3>
             <p className="text-xs md:text-sm text-muted-foreground">{totalUnits.toLocaleString()} items • <span className="text-destructive">{lowStockCount} low stock</span></p>
           </div>
         </div>

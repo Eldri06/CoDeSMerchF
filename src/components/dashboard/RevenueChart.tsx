@@ -5,19 +5,21 @@ import { Button } from "@/components/ui/button";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
 import { useEventContext } from "@/context/EventContext";
+import { getGeneralSettings } from "@/lib/utils";
 
 type Period = "1d" | "5d" | "7d" | "30d";
 
 const RevenueChart = () => {
   const { currentEventId } = useEventContext();
   const [period, setPeriod] = useState<Period>("7d");
-  const [txns, setTxns] = useState<Array<{ id?: string; total?: number; createdAt?: string; eventId?: string | null }>>([]);
+  type TxnShape = { id?: string; total?: number; createdAt?: string; eventId?: string | null };
+  const [txns, setTxns] = useState<TxnShape[]>([]);
 
   useEffect(() => {
     const r = ref(database, "transactions");
     const unsub = onValue(r, (snap) => {
-      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
-      const list = Object.entries(obj).map(([id, t]) => ({ ...(t as any), id }));
+      const obj = snap.exists() ? (snap.val() as Record<string, TxnShape>) : {};
+      const list = Object.entries(obj).map(([id, t]) => ({ ...t, id }));
       const filtered = currentEventId ? list.filter((t) => (t.eventId ?? null) === currentEventId) : list;
       setTxns(filtered);
     });
@@ -86,8 +88,16 @@ const RevenueChart = () => {
             </linearGradient>
           </defs>
           <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(value) => `₱${(value as number) / 1000}k`} width={40} />
-          <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Revenue']} />
+          <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(value) => {
+            const { currency } = getGeneralSettings();
+            const symbol = currency === 'USD' ? '$' : '₱';
+            return `${symbol}${(value as number) / 1000}k`;
+          }} width={40} />
+          <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} formatter={(value: number) => {
+            const { currency } = getGeneralSettings();
+            const symbol = currency === 'USD' ? '$' : '₱';
+            return [`${symbol}${Number(value).toLocaleString()}`, 'Revenue'];
+          }} />
           <Area type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorRevenue)" strokeWidth={2} />
         </AreaChart>
       </ResponsiveContainer>

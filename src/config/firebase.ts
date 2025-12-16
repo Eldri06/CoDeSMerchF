@@ -26,9 +26,11 @@ export const database = getDatabase(app);
 export const storage = getStorage(app);
 
 let SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || undefined;
-let SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || undefined;
-let SUPABASE_SERVICE = (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string | undefined) || undefined;
-SUPABASE_URL = SUPABASE_URL ? SUPABASE_URL.replace(/[`'\"]/g, "").trim() : SUPABASE_URL;
+const SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || undefined;
+const SUPABASE_SERVICE = (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string | undefined) || undefined;
+SUPABASE_URL = SUPABASE_URL
+  ? SUPABASE_URL.split("\"").join("").split("'").join("").split("`").join("").trim()
+  : SUPABASE_URL;
 let SUPABASE_KEY = (SUPABASE_ANON || SUPABASE_SERVICE)?.trim();
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -36,13 +38,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     const lsUrl = localStorage.getItem("SUPABASE_URL") || localStorage.getItem("VITE_SUPABASE_URL") || undefined;
     const lsAnon = localStorage.getItem("SUPABASE_ANON_KEY") || localStorage.getItem("VITE_SUPABASE_ANON_KEY") || undefined;
     const lsService = localStorage.getItem("SUPABASE_SERVICE_ROLE_KEY") || localStorage.getItem("VITE_SUPABASE_SERVICE_ROLE_KEY") || undefined;
-    const candUrl = lsUrl ? lsUrl.replace(/[`'\"]/g, "").trim() : undefined;
+    const candUrl = lsUrl
+      ? lsUrl.split("\"").join("").split("'").join("").split("`").join("").trim()
+      : undefined;
     const candKey = (lsAnon || lsService)?.trim();
     if (candUrl && candKey) {
       SUPABASE_URL = candUrl;
       SUPABASE_KEY = candKey;
     }
-  } catch {}
+  } catch { void 0 }
 }
 
 export const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : undefined;

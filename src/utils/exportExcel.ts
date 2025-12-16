@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { getGeneralSettings } from "@/lib/utils";
 
 export type ColumnDef = { header: string; key: string; width?: number };
 
@@ -118,7 +119,9 @@ export async function exportExcel({
       if (typeof cell.value === "number") {
         cell.alignment = { ...cell.alignment, horizontal: "right" };
         if (colKey && numKeys.includes(colKey)) {
-          cell.numFmt = "₱#,##0.00";
+          const { currency } = getGeneralSettings();
+          const symbol = currency === 'USD' ? '$' : '₱';
+          cell.numFmt = `${symbol}#,##0.00`;
         } else {
           cell.numFmt = "#,##0.00";
         }

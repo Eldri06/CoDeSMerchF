@@ -75,7 +75,7 @@ const SidebarContent = ({
     if (!uid) return;
     const r = dbRef(database, `users/${uid}`);
     const unsub = onValue(r, (snap) => {
-      const v = snap.val() as any;
+      const v = snap.val() as Partial<typeof user> | null;
       if (!v) return;
       const merged = { ...user!, ...v };
       localStorage.setItem("user", JSON.stringify(merged));
@@ -101,8 +101,8 @@ const SidebarContent = ({
     {/* Navigation */}
     <nav className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 md:space-y-6">
       {(() => {
-        const roleLc = String(user?.systemRole || "").toLowerCase() || "member";
-        const memberAllowed = new Set(["dashboard", "products", "events"]);
+        const roleLc = (String(user?.systemRole || user?.role || "").toLowerCase() || "member");
+        const memberAllowed = new Set(["dashboard", "products", "events", "settings"]);
         const filterItem = (id: string) => {
           if (roleLc === "member") return memberAllowed.has(id);
           return true;

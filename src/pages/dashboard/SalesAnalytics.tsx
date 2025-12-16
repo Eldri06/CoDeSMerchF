@@ -18,6 +18,7 @@ import { useEventContext } from "@/context/EventContext";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
 import { Transaction, TransactionItem } from "@/services/transactionService";
+import { formatCurrency } from "@/lib/utils";
 
 const SalesAnalytics = () => {
   const { currentEventId } = useEventContext();
@@ -110,7 +111,7 @@ const SalesAnalytics = () => {
           <div className="w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center mb-4">
             <TrendingUp className="text-success" size={24} />
           </div>
-          <h3 className="text-2xl font-bold mb-1">₱{totals.avgTransaction.toFixed(2)}</h3>
+          <h3 className="text-2xl font-bold mb-1">{formatCurrency(totals.avgTransaction)}</h3>
           <p className="text-sm text-muted-foreground">Avg Transaction</p>
         </Card>
 

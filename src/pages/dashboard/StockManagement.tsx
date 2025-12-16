@@ -15,6 +15,7 @@ import { productService, Product } from "@/services/productService";
 import { Transaction, TransactionItem } from "@/services/transactionService";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 const StockManagement = () => {
   const { currentEventId, currentEventName } = useEventContext();
@@ -150,7 +151,7 @@ const StockManagement = () => {
         rawType: tRaw,
         quantity: m.qty,
         reason: m.note || (tRaw === "restock" ? "Restock" : "Sale"),
-        time: new Date(m.timestamp).toLocaleString(),
+        time: formatDateTime(m.timestamp),
         timestamp: new Date(m.timestamp).getTime(),
       };
     });
@@ -294,7 +295,7 @@ const StockManagement = () => {
               </div>
               <Badge variant="outline" className="text-[10px] md:text-xs">Total</Badge>
             </div>
-            <h3 className="text-lg md:text-2xl font-bold mb-0.5 md:mb-1">₱{metrics.inventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+            <h3 className="text-lg md:text-2xl font-bold mb-0.5 md:mb-1">{formatCurrency(Number(metrics.inventoryValue || 0))}</h3>
             <p className="text-xs md:text-sm text-muted-foreground">Inventory Value</p>
           </Card>
       </div>

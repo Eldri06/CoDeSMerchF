@@ -22,6 +22,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { formatCurrency } from "@/lib/utils";
 
 const Revenue = () => {
   const { currentEventId, currentEventName } = useEventContext();
@@ -164,7 +165,7 @@ const Revenue = () => {
             </div>
             <Badge className="text-xs">{currentEventName}</Badge>
           </div>
-          <h3 className="text-xl md:text-2xl font-bold mb-1">₱{totalRevenue.toFixed(2)}</h3>
+          <h3 className="text-xl md:text-2xl font-bold mb-1">{formatCurrency(totalRevenue)}</h3>
           <p className="text-xs md:text-sm text-muted-foreground mb-2">Total Sales</p>
           {changeVsPrevDay !== null ? (
             <div className="flex items-center gap-1 text-success text-xs md:text-sm">
@@ -183,7 +184,7 @@ const Revenue = () => {
             </div>
             <Badge variant="secondary" className="text-xs">{`${profitMarginPct.toFixed(1)}%`}</Badge>
           </div>
-          <h3 className="text-xl md:text-2xl font-bold mb-1">₱{netProfit.toFixed(2)}</h3>
+          <h3 className="text-xl md:text-2xl font-bold mb-1">{formatCurrency(netProfit)}</h3>
           <p className="text-xs md:text-sm text-muted-foreground mb-2">Net Profit</p>
           <p className="text-xs text-muted-foreground">Profit Margin</p>
         </Card>
@@ -195,7 +196,7 @@ const Revenue = () => {
             </div>
             <Badge variant="outline" className="text-xs">Breakdown</Badge>
           </div>
-          <h3 className="text-xl md:text-2xl font-bold mb-1">₱{totalCosts.toFixed(2)}</h3>
+          <h3 className="text-xl md:text-2xl font-bold mb-1">{formatCurrency(totalCosts)}</h3>
           <p className="text-xs md:text-sm text-muted-foreground mb-2">Total Costs</p>
           <p className="text-xs text-muted-foreground">{totalRevenue ? `${((totalCosts / totalRevenue) * 100).toFixed(1)}% of revenue` : "—"}</p>
         </Card>

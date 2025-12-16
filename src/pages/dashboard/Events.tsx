@@ -9,10 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { eventService, EventItem } from "@/services/eventService";
 import { productService } from "@/services/productService";
-import { transactionService } from "@/services/transactionService";
+import { transactionService, Transaction, TransactionItem } from "@/services/transactionService";
 import { useEventContext } from "@/context/EventContext";
 import { toast } from "sonner";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar, Legend } from "recharts";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { authService } from "@/services/authService";
 
 const Events = () => {
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -25,22 +27,27 @@ const Events = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const [detailsTxns, setDetailsTxns] = useState<any[]>([]);
-  const [detailsProducts, setDetailsProducts] = useState<EventItem[]>([] as any);
+  const [detailsTxns, setDetailsTxns] = useState<Transaction[]>([]);
+  const [detailsProducts, setDetailsProducts] = useState<EventItem[]>([]);
   const { refreshEvents, setEvent } = useEventContext();
-
-  const load = async () => {
-    setLoading(true);
-    const list = await eventService.getAllEvents();
-    setEvents(list);
-    setLoading(false);
-  };
+  const currentUser = authService.getCurrentUser();
+  const roleLabel = String(currentUser?.role || currentUser?.systemRole || "member").toLowerCase();
+  const isMember = roleLabel === "member";
+  const canManage = !isMember;
 
   useEffect(() => {
-    load();
+    const r = ref(database, "events");
+    const unsub = onValue(r, (snap) => {
+      const obj = snap.exists() ? (snap.val() as Record<string, EventItem>) : {};
+      const list = Object.entries(obj).map(([id, e]) => ({ ...e, id }));
+      setEvents(list);
+      setLoading(false);
+    });
+    return () => unsub();
   }, []);
 
   const createEvent = async () => {
+    if (!canManage) return;
     if (!name.trim()) {
       toast.error("Event name is required");
       return;
@@ -53,7 +60,6 @@ const Events = () => {
       setStartDate("");
       setEndDate("");
       await refreshEvents();
-      await load();
       if (res.id) setEvent(res.id);
     } else {
       toast.error("Failed to create event");
@@ -70,6 +76,7 @@ const Events = () => {
   };
 
   const saveEdit = async () => {
+    if (!canManage) return;
     if (!editId) return;
     const res = await eventService.updateEvent(editId, { name, status, startDate, endDate });
     if (res.success) {
@@ -77,18 +84,17 @@ const Events = () => {
       setIsCreateOpen(false);
       setEditId(null);
       await refreshEvents();
-      await load();
     } else {
       toast.error("Failed to update event");
     }
   };
 
   const removeEvent = async (id: string) => {
+    if (!canManage) return;
     const res = await eventService.deleteEvent(id);
     if (res.success) {
       toast.success("Event deleted");
       await refreshEvents();
-      await load();
     } else {
       toast.error("Failed to delete event");
     }
@@ -101,10 +107,12 @@ const Events = () => {
           <h1 className="text-3xl font-bold mb-2">Events</h1>
           <p className="text-muted-foreground">Manage CoDeS merchandise events</p>
         </div>
-        <Button className="gap-2" onClick={() => setIsCreateOpen(true)}>
-          <Plus size={20} />
-          Create Event
-        </Button>
+        {canManage && (
+          <Button className="gap-2" onClick={() => setIsCreateOpen(true)}>
+            <Plus size={20} />
+            Create Event
+          </Button>
+        )}
       </div>
       <div>
         <h2 className="text-xl font-bold mb-4">All Events</h2>
@@ -123,12 +131,16 @@ const Events = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-primary">{event.status}</Badge>
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(event)}>
-                      <Edit size={16} />
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => removeEvent(event.id!)}>
-                      <Trash2 size={16} />
-                    </Button>
+                    {canManage && (
+                      <>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(event)}>
+                          <Edit size={16} />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => removeEvent(event.id!)}>
+                          <Trash2 size={16} />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <EventStats eventId={event.id!} />
@@ -143,7 +155,7 @@ const Events = () => {
                       setDetailsTxns(tx);
                       const products = await productService.getAllProducts();
                       const p = products.filter((pr) => (pr.eventId ?? null) === event.id);
-                      setDetailsProducts(p as any);
+                      setDetailsProducts(p);
                     }}>View Details</Button>
                   </div>
                 </div>
@@ -153,7 +165,7 @@ const Events = () => {
         )}
       </div>
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog open={isCreateOpen && canManage} onOpenChange={setIsCreateOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Event</DialogTitle>
@@ -188,10 +200,12 @@ const Events = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-            {editId ? (
-              <Button onClick={saveEdit}>Save</Button>
-            ) : (
-              <Button onClick={createEvent}>Create</Button>
+            {canManage && (
+              editId ? (
+                <Button onClick={saveEdit}>Save</Button>
+              ) : (
+                <Button onClick={createEvent}>Create</Button>
+              )
             )}
           </DialogFooter>
         </DialogContent>
@@ -209,10 +223,10 @@ const Events = () => {
                 <div className="text-sm text-muted-foreground">No products for this event.</div>
               ) : (
                 <div className="space-y-2">
-                  {detailsProducts.map((p: any) => (
+                  {detailsProducts.map((p) => (
                     <div key={p.id} className="flex items-center justify-between text-sm">
                       <span className="truncate">{p.name}</span>
-                      <span>₱{p.price} • Stock {p.stock}</span>
+                      <span>{formatCurrency(Number(p.price || 0))} • Stock {p.stock}</span>
                     </div>
                   ))}
                 </div>
@@ -223,20 +237,26 @@ const Events = () => {
               {detailsTxns.length === 0 ? (
                 <div className="text-sm text-muted-foreground">No transactions yet.</div>
               ) : (
-                <div className="space-y-2">
-                  {detailsTxns.map((t: any) => (
-                    <div key={t.id} className="flex items-center justify-between text-sm">
-                      <span className="font-mono">{t.id}</span>
-                      <span>₱{t.total} • {t.items?.length || 0} items{t.customerName ? ` • ${t.customerName}` : ""}{t.yearLevel ? ` • ${t.yearLevel}` : ""}</span>
-                    </div>
-                  ))}
+                <div className="space-y-2 max-h-56 overflow-auto pr-1">
+                  {detailsTxns.map((t) => {
+                    const itemQty = (t.items || []).reduce((sum, it) => sum + Number(it.quantity || 0), 0);
+                    const shortId = String(t.id || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8);
+                    return (
+                      <div key={t.id} className="grid grid-cols-2 gap-2 text-sm">
+                        <span className="font-mono truncate">{shortId}</span>
+                        <span className="text-right">{formatCurrency(Number(t.total || 0))} • {itemQty} items</span>
+                        <span className="truncate text-muted-foreground">{t.customerName || ""}{t.yearLevel ? ` • ${t.yearLevel}` : ""}</span>
+                        <span className="text-right text-muted-foreground">{formatDateTime(t.createdAt)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </Card>
             <Card className="p-4 md:col-span-2">
               <h3 className="font-bold mb-3">Revenue Trend</h3>
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={detailsTxns.reduce((acc: any[], t: any) => {
+                <LineChart data={detailsTxns.reduce((acc: Array<{ date: string; total: number }>, t) => {
                   const d = (t.createdAt || "").slice(0,10);
                   const found = acc.find((x) => x.date === d);
                   if (found) found.total += (t.total || 0);
@@ -257,8 +277,8 @@ const Events = () => {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={(() => {
                   const counts: Record<string, number> = {};
-                  detailsTxns.forEach((t: any) => t.items?.forEach((it: any) => {
-                    counts[it.name] = (counts[it.name] || 0) + it.quantity;
+                  detailsTxns.forEach((t) => (t.items || []).forEach((it: TransactionItem) => {
+                    counts[it.name] = (counts[it.name] || 0) + Number(it.quantity || 0);
                   }));
                   return Object.entries(counts).map(([name, qty]) => ({ name, qty })).slice(0, 8);
                 })()}>
@@ -308,10 +328,12 @@ const EventStats = ({ eventId }: { eventId: string }) => {
       </div>
       <div className="flex items-center gap-2 text-sm">
         <DollarSign size={16} className="text-muted-foreground" />
-        <span>Revenue: ₱{stats.revenue.toLocaleString()}</span>
+        <span>Revenue: {formatCurrency(Number(stats.revenue || 0))}</span>
       </div>
     </div>
   );
 };
 
 export default Events;
+import { onValue, ref } from "firebase/database";
+import { database } from "@/config/firebase";

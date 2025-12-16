@@ -14,6 +14,7 @@ import { authService } from "@/services/authService";
 import codesLogo from "@/assets/codes-logo.png";
 import { database, supabase } from "@/config/firebase";
 import { onValue, ref, push, set, update, serverTimestamp } from "firebase/database";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 interface CartItem {
   id: string;
@@ -89,7 +90,7 @@ const CartContent = ({
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm truncate">{item.name}</p>
-              <p className="text-xs text-muted-foreground">₱{item.price} each</p>
+              <p className="text-xs text-muted-foreground">{formatCurrency(item.price)} each</p>
             </div>
             <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-2">
@@ -111,7 +112,7 @@ const CartContent = ({
                   +
                 </Button>
               </div>
-              <p className="font-bold text-sm">₱{item.price * item.quantity}</p>
+              <p className="font-bold text-sm">{formatCurrency(item.price * item.quantity)}</p>
             </div>
             <Button
               size="sm"
@@ -130,13 +131,13 @@ const CartContent = ({
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span>Items ({cartItems.length})</span>
-          <span>₱{subtotal.toFixed(2)}</span>
+          <span>{formatCurrency(subtotal)}</span>
         </div>
         
         <div className="h-px bg-border my-2" />
         <div className="flex justify-between text-base md:text-lg font-bold">
           <span>Total</span>
-          <span className="text-primary">₱{total.toFixed(2)}</span>
+          <span className="text-primary">{formatCurrency(total)}</span>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div>
@@ -379,7 +380,7 @@ const POS = () => {
       yearLevel: yearLevel,
     });
     if (res.success) {
-      setLastTxn({ id: res.id, items, subtotal, total, eventName: inferredEventName, createdAt: new Date().toLocaleString(), paymentMethod, cashier: user?.fullName || "", customerName: customerName || "", yearLevel: yearLevel });
+      setLastTxn({ id: res.id, items, subtotal, total, eventName: inferredEventName, createdAt: formatDateTime(new Date()), paymentMethod, cashier: user?.fullName || "", customerName: customerName || "", yearLevel: yearLevel });
       setIsReceiptOpen(true);
       setCartItems([]);
       setIsCartOpen(false);
@@ -451,7 +452,7 @@ const POS = () => {
               </div>
               <h3 className="font-semibold mb-1 text-xs md:text-sm truncate">{product.name}</h3>
               <div className="flex items-center justify-between">
-                <span className="text-sm md:text-lg font-bold text-primary">₱{product.price}</span>
+                <span className="text-sm md:text-lg font-bold text-primary">{formatCurrency(Number(product.price || 0))}</span>
                 <Badge variant={product.stock > 20 ? "default" : product.stock > 5 ? "secondary" : "destructive"} className="text-[10px] md:text-xs">{product.stock}</Badge>
               </div>
             </Card>
@@ -471,7 +472,7 @@ const POS = () => {
                   {totalItems}
                 </Badge>
               )}
-              <span className="ml-auto font-bold">₱{total.toFixed(2)}</span>
+              <span className="ml-auto font-bold">{formatCurrency(total)}</span>
               <ChevronUp size={20} className="ml-2" />
             </Button>
           </SheetTrigger>
@@ -553,13 +554,13 @@ const POS = () => {
                 {lastTxn.items.map((it: { name: string; quantity: number; price: number }, idx: number) => (
                   <div key={idx} className="flex justify-between text-sm">
                     <span className="truncate">{it.name} × {it.quantity}</span>
-                    <span>₱{(it.price * it.quantity).toFixed(2)}</span>
+                    <span>{formatCurrency(it.price * it.quantity)}</span>
                   </div>
                 ))}
               </div>
               <div className="border-t pt-2 text-sm">
-                <div className="flex justify-between"><span>Subtotal</span><span>₱{lastTxn.subtotal.toFixed(2)}</span></div>
-                <div className="flex justify-between font-bold"><span>Total</span><span>₱{lastTxn.total.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(lastTxn.subtotal)}</span></div>
+                <div className="flex justify-between font-bold"><span>Total</span><span>{formatCurrency(lastTxn.total)}</span></div>
               </div>
             </div>
           ) : null}

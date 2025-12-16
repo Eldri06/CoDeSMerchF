@@ -39,8 +39,6 @@ router.post('/ensure-bucket', async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // Upload file via service role (server-side)
 router.post('/upload', upload.single('file'), async (req, res) => {
   try {
@@ -62,3 +60,5 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     return res.status(500).json({ success: false, error: error.message });
   }
 });
+
+module.exports = router;

@@ -12,6 +12,7 @@ import { eventService } from "@/services/eventService";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 const Transactions = () => {
   const { currentEventId, currentEventName } = useEventContext();
@@ -55,12 +56,13 @@ const Transactions = () => {
         filteredList.map((t) => {
           const idStr = String(t.id || "");
           const displayId = idStr ? idStr.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) : "(unsynced)";
+          const itemsCount = (t.items || []).reduce((sum, it) => sum + Number(it.quantity || 0), 0);
           return {
             id: idStr,
             displayId,
-            date: new Date(t.createdAt || Date.now()).toLocaleString(),
+            date: formatDateTime(t.createdAt || Date.now()),
             event: t.eventId ? (eventMap[t.eventId] || (currentEventId && t.eventId === currentEventId ? currentEventName : "")) : "",
-            items: t.items?.length || 0,
+            items: itemsCount,
             amount: t.total || 0,
             payment: ((t.paymentMethod || "cash") === "cash" ? "Cash" : (t.paymentMethod === "gcash" ? "GCash" : String(t.paymentMethod).toString())) ,
             cashier: t.cashier || "",
@@ -203,7 +205,7 @@ const Transactions = () => {
               {detailsItems.map((it: TransactionItem, idx: number) => (
                 <div key={idx} className="flex justify-between">
                   <span className="truncate">{it.name} × {it.quantity}</span>
-                  <span>₱{Number(it.price * it.quantity).toFixed(2)}</span>
+                  <span>{formatCurrency(Number(it.price * it.quantity))}</span>
                 </div>
               ))}
             </div>
@@ -216,8 +218,8 @@ const Transactions = () => {
               ))}
             </div>
             <div className="border-t pt-2">
-              <div className="flex justify-between"><span>Subtotal</span><span>₱{Number(selectedTxn.subtotal || 0).toFixed(2)}</span></div>
-              <div className="flex justify-between font-bold"><span>Total</span><span>₱{Number(selectedTxn.total || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(Number(selectedTxn.subtotal || 0))}</span></div>
+              <div className="flex justify-between font-bold"><span>Total</span><span>{formatCurrency(Number(selectedTxn.total || 0))}</span></div>
             </div>
           </div>
         ) : null}
@@ -272,7 +274,7 @@ const Transactions = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
         <Card className="p-3 md:p-6">
           <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Today's Sales</p>
-          <h3 className="text-lg md:text-2xl font-bold">₱{stats.todaysSales.toFixed(2)}</h3>
+          <h3 className="text-lg md:text-2xl font-bold">{formatCurrency(stats.todaysSales)}</h3>
         </Card>
         <Card className="p-3 md:p-6">
           <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Total Trans.</p>
@@ -280,7 +282,7 @@ const Transactions = () => {
         </Card>
         <Card className="p-3 md:p-6">
           <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Average Sale</p>
-          <h3 className="text-lg md:text-2xl font-bold">₱{stats.avgSale.toFixed(2)}</h3>
+          <h3 className="text-lg md:text-2xl font-bold">{formatCurrency(stats.avgSale)}</h3>
         </Card>
         <Card className="p-3 md:p-6">
           <p className="text-xs md:text-sm text-muted-foreground mb-0.5 md:mb-1">Items Sold</p>
@@ -323,7 +325,7 @@ const Transactions = () => {
                   <p className="font-mono font-medium text-sm">{txn.displayId}</p>
                   <p className="text-xs text-muted-foreground">{txn.date}</p>
                 </div>
-                <p className="font-bold text-primary">₱{txn.amount}</p>
+                <p className="font-bold text-primary">{formatCurrency(txn.amount)}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 {txn.event && <Badge variant="secondary" className="text-[10px]">{txn.event}</Badge>}
@@ -369,7 +371,7 @@ const Transactions = () => {
                     {txn.event && <Badge variant="secondary">{txn.event}</Badge>}
                   </td>
                   <td className="py-3 px-4">{txn.items} items</td>
-                  <td className="py-3 px-4 font-bold">₱{txn.amount}</td>
+                  <td className="py-3 px-4 font-bold">{formatCurrency(txn.amount)}</td>
                   <td className="py-3 px-4">
                     <Badge variant={txn.payment === "Cash" ? "default" : "outline"}>
                       {txn.payment}

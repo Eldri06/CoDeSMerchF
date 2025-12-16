@@ -2,6 +2,7 @@ import { Target, TrendingUp, Award, AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { formatCurrency } from "@/lib/utils";
 
 const Performance = () => {
   const goals = [
@@ -60,14 +61,14 @@ const Performance = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Current</span>
                   <span className="font-bold">
-                    {goal.unit}{goal.current.toLocaleString()}{goal.unit === "%" ? "" : ""}
+                    {goal.unit === "₱" ? formatCurrency(goal.current) : `${goal.unit}${goal.current.toLocaleString()}`}
                   </span>
                 </div>
                 <Progress value={progress} className="h-3" />
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Target</span>
                   <span>
-                    {goal.unit}{goal.target.toLocaleString()}{goal.unit === "%" ? "" : ""}
+                    {goal.unit === "₱" ? formatCurrency(goal.target) : `${goal.unit}${goal.target.toLocaleString()}`}
                   </span>
                 </div>
                 <div className="text-center pt-2">
@@ -99,7 +100,7 @@ const Performance = () => {
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-border">
                   <span className="text-sm text-muted-foreground">Revenue</span>
-                  <span className="font-bold">₱{product.revenue.toLocaleString()}</span>
+                  <span className="font-bold">{formatCurrency(product.revenue)}</span>
                 </div>
               </div>
             ))}

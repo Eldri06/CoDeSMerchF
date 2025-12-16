@@ -1,120 +1,91 @@
-import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { CheckCircle, Package, AlertTriangle } from "lucide-react";
+import { formatDateTime } from "@/lib/utils";
 import { database } from "@/config/firebase";
 import { onValue, ref } from "firebase/database";
+import { useEffect, useMemo, useState } from "react";
+import { useEventContext } from "@/context/EventContext";
 
-type FeedItem = {
-  type: "sale" | "restock" | "alert";
-  text: string;
-  amount?: string;
-  ts: number;
-};
+type Movement = { type: string; qty: number; eventId?: string | null; note?: string; timestamp?: string };
+type Txn = { id?: string; eventId?: string | null; createdAt?: string; items?: Array<{ productId: string; name: string; quantity: number }> };
 
 const ActivityFeed = () => {
-  const [txns, setTxns] = useState<Array<{ id?: string; total?: number; createdAt?: string }>>([]);
-  const [products, setProducts] = useState<Record<string, { name?: string; stock?: number; reorderLevel?: number }>>({});
-  const [movements, setMovements] = useState<Array<{ productId: string; type: string; qty: number; timestamp?: string }>>([]);
+  const { currentEventId } = useEventContext();
+  const [stockItems, setStockItems] = useState<Array<{ productId: string; movement: Movement }>>([]);
+  const [txnItems, setTxnItems] = useState<Array<{ productId: string; movement: Movement }>>([]);
 
   useEffect(() => {
-    const rt = ref(database, "transactions");
-    const rp = ref(database, "products");
-    const rm = ref(database, "stockMovements");
-    const unsubT = onValue(rt, (snap) => {
-      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
-      const list = Object.entries(obj).map(([id, t]) => ({ ...(t as any), id }));
-      setTxns(list);
-    });
-    const unsubP = onValue(rp, (snap) => {
-      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
-      const map: Record<string, any> = {};
-      Object.entries(obj).forEach(([id, p]) => (map[id] = p));
-      setProducts(map);
-    });
-    const unsubM = onValue(rm, (snap) => {
-      const obj = snap.exists() ? (snap.val() as Record<string, any>) : {};
-      const list: Array<{ productId: string; type: string; qty: number; timestamp?: string }> = [];
-      Object.entries(obj).forEach(([pid, moves]) => {
-        const mv = moves as Record<string, any>;
-        Object.values(mv).forEach((entry) => {
-          list.push({ productId: pid, type: String(entry.type || ""), qty: Number(entry.qty || 0), timestamp: entry.timestamp });
-        });
+    const r = ref(database, "stockMovements");
+    const unsub = onValue(r, (snap) => {
+      if (!snap.exists()) { setStockItems([]); return; }
+      const obj = snap.val() as Record<string, Record<string, Movement>>;
+      const flat: Array<{ productId: string; movement: Movement }> = [];
+      Object.entries(obj).forEach(([pid, movements]) => {
+        Object.values(movements || {}).forEach((mv) => flat.push({ productId: pid, movement: mv }));
       });
-      setMovements(list);
+      setStockItems(flat);
     });
-    return () => {
-      unsubT();
-      unsubP();
-      unsubM();
-    };
+    return () => unsub();
   }, []);
 
-  const items = useMemo(() => {
-    const list: FeedItem[] = [];
-    txns.forEach((t) => {
-      const ts = t.createdAt ? new Date(t.createdAt).getTime() : Date.now();
-      list.push({ type: "sale", text: `Sale completed`, amount: `₱${Number(t.total || 0).toLocaleString()}` , ts });
+  useEffect(() => {
+    const r = ref(database, "transactions");
+    const unsub = onValue(r, (snap) => {
+      if (!snap.exists()) { setTxnItems([]); return; }
+      const obj = snap.val() as Record<string, Txn>;
+      const list: Array<{ productId: string; movement: Movement }> = [];
+      Object.values(obj).forEach((t) => {
+        const items = Array.isArray(t.items) ? t.items : [];
+        items.forEach((it) => {
+          list.push({ productId: String(it.productId || it.name), movement: { type: "sale", qty: Number(it.quantity || 0), eventId: t.eventId ?? null, note: "POS checkout", timestamp: t.createdAt } });
+        });
+      });
+      setTxnItems(list);
     });
-    movements.forEach((m) => {
-      const name = products[m.productId]?.name || m.productId;
-      const ts = m.timestamp ? new Date(m.timestamp).getTime() : Date.now();
-      if (m.type === "sale") list.push({ type: "sale", text: `${name} sold x${m.qty}`, ts });
-      else list.push({ type: "restock", text: `${name} restocked x${m.qty}`, ts });
-    });
-    Object.entries(products).forEach(([pid, p]) => {
-      const stock = Number(p.stock || 0);
-      const threshold = Number(p.reorderLevel ?? 10);
-      if (stock <= threshold) list.push({ type: "alert", text: `${p.name || pid} low stock (${stock})`, ts: Date.now() });
-    });
-    list.sort((a, b) => b.ts - a.ts);
-    return list.slice(0, 8);
-  }, [txns, movements, products]);
+    return () => unsub();
+  }, []);
 
-  const formatAgo = (ts: number) => {
-    const diff = Math.floor((Date.now() - ts) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  };
+  const merged = useMemo(() => {
+    const all = [...stockItems, ...txnItems];
+    const filtered = currentEventId ? all.filter((x) => ((x.movement.eventId ?? null) === currentEventId) || (x.movement.eventId == null)) : all;
+    filtered.sort((a, b) => String(b.movement.timestamp || "").localeCompare(String(a.movement.timestamp || "")));
+    return filtered.slice(0, 12);
+  }, [stockItems, txnItems, currentEventId]);
+
+  const rows = useMemo(() => merged.map((it) => {
+    const isSale = it.movement.type === "sale";
+    const isAlert = it.movement.type === "alert";
+    const Icon = isSale ? CheckCircle : isAlert ? AlertTriangle : Package;
+    return { Icon, it };
+  }), [merged]);
 
   return (
     <Card className="p-6 glass-card border-border/50">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold mb-1">Recent Activity</h3>
-          <p className="text-sm text-muted-foreground">Latest updates and alerts</p>
+          <h3 className="text-lg font-semibold">Recent Activity</h3>
+          <p className="text-sm text-muted-foreground">Synced with POS and inventory</p>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {items.map((activity, index) => {
-          const Icon = activity.type === "sale" ? CheckCircle : activity.type === "restock" ? Package : AlertTriangle;
-          const color = activity.type === "sale" ? "text-accent" : activity.type === "restock" ? "text-primary" : "text-amber-500";
-          const bgColor = activity.type === "sale" ? "bg-accent/10" : activity.type === "restock" ? "bg-primary/10" : "bg-amber-500/10";
-          return (
-            <div
-              key={index}
-              className="flex gap-4 cursor-pointer"
-              onClick={() => {
-                const section = activity.type === "sale" ? "transactions" : activity.type === "restock" ? "stock" : "products";
-                window.dispatchEvent(new CustomEvent("dashboard:navigate", { detail: { section } }));
-              }}
-            >
-              <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${bgColor} flex-shrink-0`}>
-                <Icon size={20} className={color} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{activity.text}</p>
-                {activity.amount && <p className="text-sm text-accent font-semibold">{activity.amount}</p>}
-                <p className="text-xs text-muted-foreground mt-1">{formatAgo(activity.ts)}</p>
-              </div>
+      <div className="space-y-3 max-h-80 overflow-auto pr-1">
+        {rows.map(({ Icon, it }, index) => (
+          <div key={index} className="flex gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-muted/40 flex-shrink-0">
+              <Icon size={18} className={it.movement.type === "alert" ? "text-amber-500" : it.movement.type === "sale" ? "text-accent" : "text-primary"} />
             </div>
-          );
-        })}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">
+                {it.movement.type === "sale" ? "Sale" : it.movement.type === "alert" ? "Alert" : "Stock"} • {it.productId}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Qty {it.movement.qty}{it.movement.note ? ` • ${it.movement.note}` : ""}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">{formatDateTime(it.movement.timestamp)}</p>
+            </div>
+          </div>
+        ))}
       </div>
-
-      <button className="w-full mt-4 py-2 text-sm text-primary hover:text-primary/80 transition-colors">View All Activity</button>
     </Card>
   );
 };

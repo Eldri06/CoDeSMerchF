@@ -3,6 +3,9 @@ import codesLogo from "@/assets/codes-logo.png";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { authService } from "@/services/authService";
+import { useEffect, useState } from "react";
+import { database } from "@/config/firebase";
+import { ref as dbRef, onValue } from "firebase/database";
 
 interface DashboardSidebarProps {
   activeSection: string;
@@ -65,7 +68,22 @@ const SidebarContent = ({
   setActiveSection: (section: string) => void;
   collapsed?: boolean;
   onItemClick?: () => void;
-}) => (
+}) => {
+  const [user, setUser] = useState(authService.getCurrentUser());
+  useEffect(() => {
+    const uid = user?.uid;
+    if (!uid) return;
+    const r = dbRef(database, `users/${uid}`);
+    const unsub = onValue(r, (snap) => {
+      const v = snap.val() as any;
+      if (!v) return;
+      const merged = { ...user!, ...v };
+      localStorage.setItem("user", JSON.stringify(merged));
+      setUser(merged);
+    });
+    return () => unsub();
+  }, [user?.uid]);
+  return (
   <>
     {/* Logo Section */}
     <div className="p-4 md:p-6 border-b border-border">
@@ -83,8 +101,7 @@ const SidebarContent = ({
     {/* Navigation */}
     <nav className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 md:space-y-6">
       {(() => {
-        const current = authService.getCurrentUser();
-        const roleLc = String(current?.systemRole || "").toLowerCase() || "member";
+        const roleLc = String(user?.systemRole || "").toLowerCase() || "member";
         const memberAllowed = new Set(["dashboard", "products", "events"]);
         const filterItem = (id: string) => {
           if (roleLc === "member") return memberAllowed.has(id);
@@ -92,7 +109,9 @@ const SidebarContent = ({
         };
         const filtered = navStructure.map((section) => ({
           ...section,
-          items: section.items.filter((i) => filterItem(i.id)).filter((i) => (i.id === "team" ? roleLc !== "member" : true)),
+          items: section.items
+            .filter((i) => filterItem(i.id))
+            .filter((i) => (i.id === "team" ? ["super_admin","president"].includes(roleLc) : true)),
         })).filter((s) => s.items.length > 0);
         return filtered.map((section) => (
           <div key={section.section}>
@@ -148,19 +167,32 @@ const SidebarContent = ({
     {/* User Info */}
     {!collapsed && (
       <div className="p-3 md:p-4 border-t border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-xs md:text-sm">
-            CO
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">CoDeS Officer</p>
-            <p className="text-xs text-muted-foreground truncate">Admin</p>
-          </div>
-        </div>
+        {(() => {
+          const u = user;
+          const roleLabel = (() => {
+            const r = String(u?.systemRole || "").toLowerCase();
+            if (r === "super_admin") return "Super Admin";
+            if (["vice_president","officer","secretary","treasurer","pio"].includes(r)) return "Admin";
+            return "Member";
+          })();
+          const initials = (u?.fullName || u?.email || "").split(" ").map(s => s[0]).join("") || "CO";
+          return (
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-primary to-secondary overflow-hidden flex items-center justify-center text-white font-bold text-xs md:text-sm">
+                {u?.avatarUrl ? <img src={u.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{u?.fullName || "CoDeS Officer"}</p>
+                <p className="text-xs text-muted-foreground truncate">{roleLabel}</p>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     )}
   </>
-);
+  );
+};
 
 const DashboardSidebar = ({ activeSection, setActiveSection, collapsed, setCollapsed }: DashboardSidebarProps) => {
   return (

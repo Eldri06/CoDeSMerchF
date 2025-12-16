@@ -48,8 +48,12 @@ const SalesAnalytics = () => {
       });
     });
     const productsSold = productIds.size;
-    const times = txns.map((t) => (t.createdAt ? new Date(t.createdAt).getTime() : Date.now()));
-    const durationDays = times.length ? Math.max(1, Math.ceil((Math.max(...times) - Math.min(...times)) / (24 * 60 * 60 * 1000)) + 0) : 0;
+    const times = txns
+      .map((t) => (t.createdAt ? new Date(t.createdAt).getTime() : null))
+      .filter((v): v is number => typeof v === "number");
+    const durationDays = times.length
+      ? Math.max(1, Math.ceil((Math.max(...times) - Math.min(...times)) / (24 * 60 * 60 * 1000)))
+      : 0;
     return { itemsSold, avgTransaction, productsSold, durationDays };
   }, [txns]);
 
@@ -74,7 +78,8 @@ const SalesAnalytics = () => {
   const hourlyData = useMemo(() => {
     const byHour: Record<string, number> = {};
     txns.forEach((t) => {
-      const d = t.createdAt ? new Date(t.createdAt) : new Date();
+      if (!t.createdAt) return;
+      const d = new Date(t.createdAt);
       const h = d.getHours();
       const label = `${((h + 11) % 12) + 1}${h < 12 ? "AM" : "PM"}`;
       const items: TransactionItem[] = Array.isArray(t.items) ? t.items : [];

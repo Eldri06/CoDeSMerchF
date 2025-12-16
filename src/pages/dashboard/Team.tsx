@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { Users, Check, X, Clock, ShieldAlert } from "lucide-react";
+import { Users, Check, X, Clock, ShieldAlert, Activity } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { database, auth } from "@/config/firebase";
-import { onValue, ref } from "firebase/database";
+import { onValue, ref, push, set, serverTimestamp, update } from "firebase/database";
 import { authService } from "@/services/authService";
 import { toast } from "sonner";
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type MemberStatus = "approved" | "pending";
 type Role = string;
@@ -19,18 +27,30 @@ interface TeamMember {
   role: Role;
   status: MemberStatus;
   requestedRole?: string;
+  lastActiveAt?: number;
+}
+
+interface DBUser {
+  fullName?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  status?: string;
+  requestedRole?: string;
+  lastActiveAt?: number;
 }
 
 const Team = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  const [rulesError, setRulesError] = useState<string | null>(null);
+  const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000/api`;
 
   useEffect(() => {
     const r = ref(database, "users");
     const unsub = onValue(r, (snap) => {
       const list: TeamMember[] = [];
       snap.forEach((c) => {
-        const v = c.val() as any;
+        const v = c.val() as DBUser;
         const statusRaw = String(v.status || "").toLowerCase();
         const isPending = statusRaw === "pending";
         list.push({
@@ -40,15 +60,40 @@ const Team = () => {
           role: String(v.role || "member"),
           status: isPending ? "pending" : "approved",
           requestedRole: String(v.requestedRole || ""),
+          lastActiveAt: typeof v.lastActiveAt === "number" ? v.lastActiveAt : undefined,
         });
       });
       setMembers(list);
+      setRulesError(null);
+    }, (err) => {
+      setRulesError(err?.message || "Permission denied reading users");
     });
     return () => unsub();
   }, []);
 
   const pendingMembers = useMemo(() => members.filter(m => m.status === "pending"), [members]);
   const approvedMembers = useMemo(() => members.filter(m => m.status === "approved"), [members]);
+
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logsMemberUid, setLogsMemberUid] = useState<string | null>(null);
+  const [logs, setLogs] = useState<Array<{ ts: number; path: string }>>([]);
+
+  useEffect(() => {
+    if (!logsOpen || !logsMemberUid) return;
+    const r = ref(database, `activityLogs/${logsMemberUid}`);
+    const unsub = onValue(r, (snap) => {
+      const items: Array<{ ts: number; path: string }> = [];
+      snap.forEach((c) => {
+        const v = c.val() as { ts?: number; path?: string };
+        if (typeof v.ts === "number" && typeof v.path === "string") {
+          items.push({ ts: v.ts, path: v.path });
+        }
+      });
+      items.sort((a, b) => b.ts - a.ts);
+      setLogs(items);
+    });
+    return () => unsub();
+  }, [logsOpen, logsMemberUid]);
 
   const handleApprove = async (uid: string, grantedRole?: string) => {
     try {
@@ -64,8 +109,9 @@ const Team = () => {
         throw new Error(j.error || "Approve failed");
       }
       toast.success("Approval granted");
-    } catch (e: any) {
-      toast.error(e.message || "Approve failed");
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message || "Approve failed";
+      toast.error(msg);
     }
   };
 
@@ -83,8 +129,9 @@ const Team = () => {
         throw new Error(j.error || "Reject failed");
       }
       toast.success("Rejected and set to member");
-    } catch (e: any) {
-      toast.error(e.message || "Reject failed");
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message || "Reject failed";
+      toast.error(msg);
     }
   };
 
@@ -102,11 +149,6 @@ const Team = () => {
   const allowed = new Set([
     "super_admin",
     "president",
-    "vice_president",
-    "officer",
-    "secretary",
-    "treasurer",
-    "pio",
   ]);
   const canSee = allowed.has(roleLc);
 
@@ -185,6 +227,11 @@ const Team = () => {
         </div>
         
         <div className="grid gap-3">
+          {rulesError && (
+            <Card className="p-4 border-destructive/40 bg-destructive/5">
+              <p className="text-sm text-destructive">{rulesError}. Ensure Realtime Database rules allow admins to read "/users".</p>
+            </Card>
+          )}
           {approvedMembers.map((member) => (
             <Card key={member.uid} className="p-4">
               <div className="flex items-center gap-3">
@@ -197,9 +244,60 @@ const Team = () => {
                   <p className="font-medium text-sm md:text-base truncate">{member.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{member.email}</p>
                 </div>
-                <Badge variant={getRoleBadgeVariant(member.role)} className="text-xs shrink-0">
-                  {member.role}
-                </Badge>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant={getRoleBadgeVariant(member.role)} className="text-xs">
+                    {member.role}
+                  </Badge>
+                  <Badge className={`text-[10px] ${member.lastActiveAt && Date.now() - member.lastActiveAt < 5 * 60_000 ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                    {member.lastActiveAt && Date.now() - member.lastActiveAt < 5 * 60_000 ? "Active" : "Offline"}
+                  </Badge>
+                  <Dialog open={logsOpen && logsMemberUid === member.uid} onOpenChange={(o) => {
+                    setLogsOpen(o);
+                    if (!o) setLogsMemberUid(null);
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => { setLogsMemberUid(member.uid); setLogsOpen(true); }}>
+                        <Activity size={14} />
+                        View Activity
+                      </Button>
+                    </DialogTrigger>
+                  <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Activity Log</DialogTitle>
+                        <DialogDescription>Recent movements for {member.name}</DialogDescription>
+                      </DialogHeader>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={async () => {
+                            try {
+                              const logRef = push(ref(database, `activityLogs/${member.uid}`));
+                              await set(logRef, { path: "/test/activity", ts: serverTimestamp() });
+                              await update(ref(database, `users/${member.uid}`), { lastActiveAt: serverTimestamp() });
+                              toast.success("Test activity added");
+                            } catch {
+                              toast.error("Failed to add test activity");
+                            }
+                          }}
+                        >
+                          Add Test Activity
+                        </Button>
+                      </div>
+                      <div className="mt-2 max-h-[50vh] overflow-auto space-y-2">
+                        {logs.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No activity yet</p>
+                        )}
+                        {logs.map((l, idx) => (
+                          <div key={idx} className="flex items-center justify-between rounded border p-2 text-sm">
+                            <span className="truncate">{l.path}</span>
+                            <span className="text-muted-foreground">{new Date(l.ts).toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </div>
             </Card>
           ))}

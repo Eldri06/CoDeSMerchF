@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 const Settings = () => {
   return (
@@ -18,12 +20,13 @@ const Settings = () => {
       <Tabs defaultValue="general" className="space-y-4 md:space-y-6">
         {/* Scrollable tabs on mobile */}
         <ScrollArea className="w-full">
-          <TabsList className="inline-flex w-max md:w-full md:grid md:grid-cols-5 h-auto p-1">
+          <TabsList className="inline-flex w-max md:w-full md:grid md:grid-cols-6 h-auto p-1">
             <TabsTrigger value="general" className="text-xs md:text-sm whitespace-nowrap px-3 py-2">General</TabsTrigger>
             <TabsTrigger value="organization" className="text-xs md:text-sm whitespace-nowrap px-3 py-2">Organization</TabsTrigger>
             <TabsTrigger value="notifications" className="text-xs md:text-sm whitespace-nowrap px-3 py-2">Notifications</TabsTrigger>
             <TabsTrigger value="security" className="text-xs md:text-sm whitespace-nowrap px-3 py-2">Security</TabsTrigger>
             <TabsTrigger value="backup" className="text-xs md:text-sm whitespace-nowrap px-3 py-2">Backup</TabsTrigger>
+            <TabsTrigger value="storage" className="text-xs md:text-sm whitespace-nowrap px-3 py-2">Storage</TabsTrigger>
           </TabsList>
           <ScrollBar orientation="horizontal" className="md:hidden" />
         </ScrollArea>
@@ -207,6 +210,7 @@ const Settings = () => {
             </div>
           </Card>
         </TabsContent>
+
       </Tabs>
     </div>
   );

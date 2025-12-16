@@ -8,7 +8,7 @@ import {
 } from "firebase/auth";
 import { ref, set, get } from "firebase/database";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000/api`;
 
 interface RegisterData {
   fullName: string;
@@ -34,6 +34,7 @@ interface UserData {
   status?: string;
   systemRole?: string;
   requestedRole?: string;
+  avatarUrl?: string;
 }
 
 export const authService = {
@@ -98,16 +99,17 @@ export const authService = {
         message: "Login successful!",
         user: userData,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Login error:", error);
 
       let errorMessage = "Login failed. Please try again.";
 
-      if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password") {
+      const err = error as { code?: string };
+      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
         errorMessage = "Invalid email or password.";
-      } else if (error.code === "auth/invalid-email") {
+      } else if (err.code === "auth/invalid-email") {
         errorMessage = "Invalid email address.";
-      } else if (error.code === "auth/too-many-requests") {
+      } else if (err.code === "auth/too-many-requests") {
         errorMessage = "Too many failed attempts. Please try again later.";
       }
 

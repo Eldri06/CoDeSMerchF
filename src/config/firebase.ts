@@ -25,8 +25,26 @@ export const auth = getAuth(app);
 export const database = getDatabase(app);
 export const storage = getStorage(app);
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-export const supabase = SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : undefined;
+let SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || undefined;
+let SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || undefined;
+let SUPABASE_SERVICE = (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string | undefined) || undefined;
+SUPABASE_URL = SUPABASE_URL ? SUPABASE_URL.replace(/[`'\"]/g, "").trim() : SUPABASE_URL;
+let SUPABASE_KEY = (SUPABASE_ANON || SUPABASE_SERVICE)?.trim();
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  try {
+    const lsUrl = localStorage.getItem("SUPABASE_URL") || localStorage.getItem("VITE_SUPABASE_URL") || undefined;
+    const lsAnon = localStorage.getItem("SUPABASE_ANON_KEY") || localStorage.getItem("VITE_SUPABASE_ANON_KEY") || undefined;
+    const lsService = localStorage.getItem("SUPABASE_SERVICE_ROLE_KEY") || localStorage.getItem("VITE_SUPABASE_SERVICE_ROLE_KEY") || undefined;
+    const candUrl = lsUrl ? lsUrl.replace(/[`'\"]/g, "").trim() : undefined;
+    const candKey = (lsAnon || lsService)?.trim();
+    if (candUrl && candKey) {
+      SUPABASE_URL = candUrl;
+      SUPABASE_KEY = candKey;
+    }
+  } catch {}
+}
+
+export const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : undefined;
 
 export default app;

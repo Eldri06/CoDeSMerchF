@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { authService } from "@/services/authService";
 import codesLogo from "@/assets/codes-logo.png";
 import { database, supabase } from "@/config/firebase";
-import { onValue, ref } from "firebase/database";
+import { onValue, ref, push, set, update, serverTimestamp } from "firebase/database";
 
 interface CartItem {
   id: string;
@@ -214,9 +214,15 @@ const POS = () => {
       const list: Product[] = Object.entries(obj).map(([id, p]) => {
         const raw = p as unknown as Record<string, unknown>;
         const imagePath = typeof raw.imagePath === "string" ? (raw.imagePath as string) : undefined;
-        const resolved = imagePath ? supabase?.storage.from("product_images").getPublicUrl(imagePath).data.publicUrl : undefined;
-        const fallback = typeof raw.imageUrl === "string" && raw.imageUrl
+        const resolved = typeof raw.imageUrl === "string" && raw.imageUrl
           ? (raw.imageUrl as string)
+          : imagePath
+          ? supabase?.storage.from("product-images").getPublicUrl(imagePath).data.publicUrl
+          : undefined;
+        const fallback = typeof raw.imageURL === "string" && raw.imageURL
+          ? (raw.imageURL as string)
+          : typeof raw.image_url === "string" && raw.image_url
+          ? (raw.image_url as string)
           : typeof raw.imageURL === "string" && raw.imageURL
           ? (raw.imageURL as string)
           : typeof raw.image_url === "string" && raw.image_url
@@ -380,6 +386,16 @@ const POS = () => {
       
       setCustomerName("");
       setYearLevel(undefined);
+
+      try {
+        const uid = String(user?.uid || "");
+        if (uid) {
+          const path = `/pos/checkout/${res.id || "txn"}`;
+          const logRef = push(ref(database, `activityLogs/${uid}`));
+          set(logRef, { path, ts: serverTimestamp() });
+          update(ref(database, `users/${uid}`), { lastActiveAt: serverTimestamp() });
+        }
+      } catch { void 0; }
     }
     setIsCheckingOut(false);
   };

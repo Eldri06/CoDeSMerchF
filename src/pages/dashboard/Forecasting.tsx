@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useEventContext } from "@/context/EventContext";
 import { productService, Product } from "@/services/productService";
 import { transactionService, Transaction, TransactionItem } from "@/services/transactionService";
+import { toast } from "sonner";
 
 const Forecasting = () => {
   const { currentEventId, currentEventName, events } = useEventContext();
@@ -30,6 +31,11 @@ const Forecasting = () => {
   useEffect(() => {
     setSelectedEventId(currentEventId ?? null);
   }, [currentEventId]);
+
+  useEffect(() => {
+    setHasPrediction(false);
+    setResult(null);
+  }, [selectedEventId, selectedProductId]);
 
   const productOptions = useMemo(() => {
     if (!products.length) return [] as Product[];
@@ -103,74 +109,40 @@ const Forecasting = () => {
     try {
       const allTxns = await transactionService.getAllTransactions();
       const selectedEv = selectedEventId ? events.find((e) => e.id === selectedEventId) || null : null;
-      const completedIds = new Set(events.filter((e) => e.status === "Completed" && e.id).map((e) => String(e.id)));
-      const trainTxns = (() => {
-        if (selectedEv && selectedEv.status !== "Completed") {
-          return allTxns.filter((t) => t.eventId && completedIds.has(String(t.eventId)));
-        }
-        if (selectedEventId) return allTxns.filter((t) => (t.eventId ?? null) === selectedEventId);
-        return allTxns;
-      })();
-      const dayMap: Record<string, number> = {};
-      trainTxns.forEach((t) => {
-        const items: TransactionItem[] = Array.isArray(t.items) ? (t.items as TransactionItem[]) : [];
-        const dt = String(t.createdAt || new Date().toISOString());
-        const day = dt.slice(0, 10);
-        items.forEach((it) => {
-          const pid = String(it.productId || "");
-          if (pid === selectedProductId) {
-            const qty = Number(it.quantity || 0);
-            dayMap[day] = (dayMap[day] || 0) + qty;
-          }
-        });
-      });
-      const days = Object.keys(dayMap).sort();
-      const y = days.map((d) => dayMap[d]);
-      const horizonDays = (() => {
-        if (selectedEv?.startDate && selectedEv?.endDate) {
-          const a = new Date(selectedEv.startDate);
-          const b = new Date(selectedEv.endDate);
-          const diff = Math.max(1, Math.ceil((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000)) + 1);
-          return diff;
-        }
-        const durations = events
-          .filter((e) => e.status === "Completed" && e.startDate && e.endDate)
-          .map((e) => {
-            const a = new Date(e.startDate!);
-            const b = new Date(e.endDate!);
-            return Math.max(1, Math.ceil((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+      if (!selectedEv || selectedEv.status !== "Completed") {
+        toast.error("Select a completed event to generate prediction");
+        return;
+      }
+      const completedIds = events.filter((e) => e.status === "Completed" && e.id).map((e) => String(e.id));
+      // Sum units per completed event for the selected product
+      const totalsByEvent: number[] = [];
+      completedIds.forEach((eid) => {
+        let sum = 0;
+        allTxns
+          .filter((t) => String(t.eventId || "") === eid)
+          .forEach((t) => {
+            const items: TransactionItem[] = Array.isArray(t.items) ? (t.items as TransactionItem[]) : [];
+            items.forEach((it) => {
+              if (String(it.productId || "") === selectedProductId) sum += Number(it.quantity || 0);
+            });
           });
-        if (durations.length === 0) return 3;
-        const sorted = [...durations].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        return sorted[mid];
-      })();
-      const mean = y.length ? y.reduce((a, b) => a + b, 0) / y.length : 0;
-      const variance = y.length ? y.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / y.length : 0;
+        totalsByEvent.push(Math.round(sum));
+      });
+      const base = totalsByEvent.filter((v) => v > 0);
+      const sorted = [...base].sort((a, b) => a - b);
+      const median = sorted.length ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : Math.round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2)) : 0;
+      const mean = base.length ? Math.round(base.reduce((a, b) => a + b, 0) / base.length) : 0;
+      const maxVal = base.length ? Math.max(...base) : 0;
+      const point = Math.round(base[completedIds.indexOf(String(selectedEv.id))] || 0);
+      const variance = base.length ? base.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / base.length : 0;
       const std = Math.sqrt(variance);
-      const reg = (() => {
-        if (y.length < 2) return { m: 0, c: mean };
-        const n = y.length;
-        const xs = Array.from({ length: n }, (_, i) => i);
-        const sumX = xs.reduce((s, v) => s + v, 0);
-        const sumY = y.reduce((s, v) => s + v, 0);
-        const sumXY = xs.reduce((s, v, i) => s + v * y[i], 0);
-        const sumXX = xs.reduce((s, v) => s + v * v, 0);
-        const m = (n * sumXY - sumX * sumY) / Math.max(1, n * sumXX - sumX * sumX);
-        const c = sumY / n - m * (sumX / n);
-        return { m, c };
-      })();
-      const future = Array.from({ length: horizonDays }, (_, k) => reg.m * (y.length + k) + reg.c);
-      const futureSum = future.reduce((s, v) => s + Math.max(0, v), 0);
-      const resid = y.map((v, i) => v - (reg.m * i + reg.c));
-      const residStd = resid.length ? Math.sqrt(resid.reduce((s, v) => s + v * v, 0) / resid.length) : std;
-      const band = 1.96 * residStd * Math.sqrt(Math.max(1, horizonDays));
-      const point = Math.round(Math.max(0, futureSum));
-      const lower = Math.max(0, Math.round(point - band));
-      const upper = Math.max(lower, Math.round(point + band));
-      const cv = mean > 0 ? std / mean : 1;
-      const conf = Math.max(60, Math.min(95, Math.round(100 - cv * 100)));
-      const recommended = Math.max(0, Math.round(point));
+      let band = Math.round(1.28 * std);
+      if (band < 1 && point > 0) band = Math.max(1, Math.round(point * 0.1));
+      const lower = Math.max(0, point - band);
+      const upper = Math.max(lower, point + band);
+      const cv = mean > 0 ? std / Math.max(mean, 1) : 1;
+      const conf = Math.max(70, Math.min(95, Math.round(100 - cv * 100)));
+      const recommended = point; // no extra buffer, UI shows +10% separately
       setResult({ point, lower, upper, confidencePercent: conf, confidenceLabel: conf >= 85 ? "High Confidence" : conf >= 75 ? "Medium Confidence" : "Low Confidence", recommended });
       setHasPrediction(true);
     } finally {
@@ -229,7 +201,7 @@ const Forecasting = () => {
             size="lg" 
             className="w-full gap-2 h-12"
             onClick={handleGenerate}
-            disabled={isGenerating}
+            disabled={isGenerating || !selectedEventId || (selectedEventId && (events.find((e) => e.id === selectedEventId)?.status !== "Completed"))}
           >
             {isGenerating ? (
               <>
@@ -311,7 +283,7 @@ const Forecasting = () => {
             </div>
             <h3 className="font-semibold mb-1">No Prediction Yet</h3>
             <p className="text-sm text-muted-foreground">
-              Select an event and product above to generate a demand forecast
+              Select a completed event and product above to generate a demand forecast
             </p>
           </div>
         </Card>

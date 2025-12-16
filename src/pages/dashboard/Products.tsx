@@ -41,11 +41,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { productService, Product } from "@/services/productService";
 import { Transaction, TransactionItem } from "@/services/transactionService";
-import { database, supabase } from "@/config/firebase";
+import { database } from "@/config/firebase";
+import { createClient } from "@supabase/supabase-js";
 import { onValue, ref } from "firebase/database";
 import { useEventContext } from "@/context/EventContext";
 
 const Products = () => {
+  const API_URL = `${window.location.protocol}//${window.location.hostname}:5000/api`;
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   
@@ -214,33 +216,40 @@ const Products = () => {
     if (!file) return;
     if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
     if (file.size > 5 * 1024 * 1024) { toast.error("Image must be ≤ 5MB"); return; }
-    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) { toast.error("Supabase not configured"); return; }
+    
     setUploadingImage(true);
     try {
-      // Ensure Supabase bucket exists and is public (one-time per environment)
-      try {
-        await fetch(`${import.meta.env.VITE_API_URL}/storage/ensure-bucket`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bucketName: 'product_images', public: true }),
-        });
-      } catch { void 0; }
       const safeSku = (formData.sku || "product").replace(/[^a-zA-Z0-9-_]/g, "_");
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
       const path = `products/${safeSku}-${Date.now()}.${ext}`;
-      const bucket = "product_images";
+      const bucket = "product-images";
       const fd = new FormData();
       fd.append('file', file);
       fd.append('bucket', bucket);
       fd.append('path', path);
-      const resp = await fetch(`${import.meta.env.VITE_API_URL}/storage/upload`, { method: 'POST', body: fd });
-      const payload = await resp.json();
-      if (!resp.ok || !payload.success) {
-        toast.error(`Upload failed: ${payload.error || resp.statusText}`);
-      } else {
-        const url = String(payload.url || '');
+      let url: string | undefined;
+      {
+        const lsUrl = localStorage.getItem('SUPABASE_URL') || localStorage.getItem('VITE_SUPABASE_URL') || import.meta.env.VITE_SUPABASE_URL || '';
+        const lsKey = localStorage.getItem('SUPABASE_ANON_KEY') || localStorage.getItem('VITE_SUPABASE_ANON_KEY') || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+        if (lsUrl && lsKey) {
+          const rt = createClient(lsUrl, lsKey);
+          const up = await rt.storage.from(bucket).upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true });
+          if (!up.error) {
+            const pub = rt.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+            url = pub || '';
+          }
+        } else {
+          toast.error('Supabase not configured. Set URL/key in Settings > Storage');
+        }
+      }
+      if (!url) {
+        toast.error('Image upload failed. Configure Supabase in Settings > Storage');
+      }
+      if (url) {
         setFormData({ ...formData, imageUrl: url, imagePath: path });
         toast.success("Image uploaded");
+      } else {
+        toast.error("Failed to upload image");
       }
     } catch (err) {
       toast.error("Failed to upload image");
@@ -259,30 +268,40 @@ const Products = () => {
     if (!file) return;
     if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
     if (file.size > 5 * 1024 * 1024) { toast.error("Image must be ≤ 5MB"); return; }
-    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) { toast.error("Supabase not configured"); return; }
+    
     setUploadingEditImage(true);
     try {
-      try {
-        await fetch(`${import.meta.env.VITE_API_URL}/storage/ensure-bucket`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bucketName: 'product_images', public: true })
-        });
-      } catch { void 0; }
       const safeSku = (String(editData.sku || selectedProduct?.sku || 'product')).replace(/[^a-zA-Z0-9-_]/g, '_');
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `products/${safeSku}-${Date.now()}.${ext}`;
-      const bucket = 'product_images';
+      const bucket = 'product-images';
       const fd = new FormData();
       fd.append('file', file);
       fd.append('bucket', bucket);
       fd.append('path', path);
-      const resp = await fetch(`${import.meta.env.VITE_API_URL}/storage/upload`, { method: 'POST', body: fd });
-      const payload = await resp.json();
-      if (!resp.ok || !payload.success) {
-        toast.error(`Upload failed: ${payload.error || resp.statusText}`);
-      } else {
-        const url = String(payload.url || '');
+      let url: string | undefined;
+      {
+        const lsUrl = localStorage.getItem('SUPABASE_URL') || localStorage.getItem('VITE_SUPABASE_URL') || import.meta.env.VITE_SUPABASE_URL || '';
+        const lsKey = localStorage.getItem('SUPABASE_ANON_KEY') || localStorage.getItem('VITE_SUPABASE_ANON_KEY') || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+        if (lsUrl && lsKey) {
+          const rt = createClient(lsUrl, lsKey);
+          const up = await rt.storage.from(bucket).upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true });
+          if (!up.error) {
+            const pub = rt.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+            url = pub || '';
+          }
+        } else {
+          toast.error('Supabase not configured. Set URL/key in Settings > Storage');
+        }
+      }
+      if (!url) {
+        toast.error('Image upload failed. Configure Supabase in Settings > Storage');
+      }
+      if (url) {
         setEditData((prev) => ({ ...prev, imageUrl: url, imagePath: path }));
         toast.success("Image uploaded");
+      } else {
+        toast.error("Failed to upload image");
       }
     } catch (err) {
       toast.error("Failed to upload image");

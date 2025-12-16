@@ -43,7 +43,7 @@ interface DBUser {
 const Team = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [rulesError, setRulesError] = useState<string | null>(null);
-  const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000/api`;
+  const API_URL = import.meta.env.VITE_API_URL || '/api';
 
   useEffect(() => {
     const r = ref(database, "users");

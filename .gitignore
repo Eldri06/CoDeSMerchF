@@ -14,13 +14,13 @@ dist-ssr
 *.local
 
 # Environment variables - CRITICAL
-.env
-.env.local
-.env.development
-.env.test
-.env.production
-.env.*
-*.env
+# .env
+# .env.local
+# .env.development
+# .env.test
+# .env.production
+# .env.*
+# *.env
 
 # Firebase credentials - CRITICAL
 *firebase*adminsdk*.json

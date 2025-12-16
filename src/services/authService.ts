@@ -8,7 +8,7 @@ import {
 } from "firebase/auth";
 import { ref, set, get } from "firebase/database";
 
-const API_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:5000/api`;
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface RegisterData {
   fullName: string;

@@ -19,7 +19,7 @@ const DashboardHeader = () => {
   type LowStockItem = { id: string; name?: string; sku?: string; stock?: number; reorderLevel?: number };
   const [lowStock, setLowStock] = useState<LowStockItem[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
-  const API_URL = `${window.location.protocol}//${window.location.hostname}:5000/api`;
+  const API_URL = import.meta.env.VITE_API_URL || '/api';
   const navigate = useNavigate();
 
   const fetchLowStock = async () => {

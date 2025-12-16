@@ -49,7 +49,7 @@ import { formatCurrency, getGeneralSettings } from "@/lib/utils";
 import { authService } from "@/services/authService";
 
 const Products = () => {
-  const API_URL = `${window.location.protocol}//${window.location.hostname}:5000/api`;
+  const API_URL = import.meta.env.VITE_API_URL || '/api';
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   

@@ -3,7 +3,7 @@ const TechStack = () => {
     { name: "React.js", color: "from-blue-400 to-blue-600" },
     { name: "Node.js", color: "from-green-400 to-green-600" },
     { name: "Firebase", color: "from-yellow-400 to-orange-600" },
-    { name: "TensorFlow", color: "from-orange-400 to-red-600" },
+    { name: "Python", color: "from-orange-400 to-red-600" },
     { name: "Tailwind CSS", color: "from-cyan-400 to-blue-600" },
     { name: "Express.js", color: "from-gray-400 to-gray-600" },
   ];

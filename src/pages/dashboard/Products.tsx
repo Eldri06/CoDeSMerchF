@@ -42,14 +42,13 @@ import { toast } from "sonner";
 import { productService, Product } from "@/services/productService";
 import { Transaction, TransactionItem } from "@/services/transactionService";
 import { database } from "@/config/firebase";
-import { createClient } from "@supabase/supabase-js";
 import { onValue, ref } from "firebase/database";
 import { useEventContext } from "@/context/EventContext";
 import { formatCurrency, getGeneralSettings } from "@/lib/utils";
 import { authService } from "@/services/authService";
 
 const Products = () => {
-  const API_URL = import.meta.env.VITE_API_URL || '/api';
+  const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`;
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   
@@ -224,42 +223,34 @@ const Products = () => {
     
     setUploadingImage(true);
     try {
-      if (!supabase) throw new Error("Supabase not configured");
       const safeSku = (formData.sku || "product").replace(/[^a-zA-Z0-9-_]/g, "_");
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
       const path = `products/${safeSku}-${Date.now()}.${ext}`;
       const bucket = "product-images";
-
-      // Upload directly to Supabase
-      const { error: uploadErr } = await supabase.storage
-        .from(bucket)
-        .upload(path, file, { contentType: file.type, upsert: true });
-
-      if (uploadErr) {
-        // Try creating bucket if it doesn't exist (requires admin/service role)
-        if (uploadErr.message.includes("bucket") || uploadErr.message.includes("not found")) {
-           try {
-             await supabase.storage.createBucket(bucket, { public: true });
-             const { error: retryErr } = await supabase.storage
-               .from(bucket)
-               .upload(path, file, { contentType: file.type, upsert: true });
-             if (retryErr) throw retryErr;
-           } catch {
-             throw uploadErr;
-           }
-        } else {
-          throw uploadErr;
-        }
+      try {
+        await fetch(`${API_URL}/storage/ensure-bucket`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bucketName: bucket, public: true })
+        });
+      } catch { void 0; }
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("bucket", bucket);
+      fd.append("path", path);
+      const resp = await fetch(`${API_URL}/storage/upload`, { method: "POST", body: fd });
+      const payload = await resp.json();
+      if (!resp.ok || !payload.success) {
+        toast.error(`Upload failed: ${payload.error || resp.statusText}`);
+      } else {
+        const url = String(payload.url || "");
+        setFormData({ ...formData, imageUrl: url, imagePath: path });
+        toast.success("Image uploaded");
       }
-
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-      const url = data?.publicUrl || "";
-      
-      setFormData({ ...formData, imageUrl: url, imagePath: path });
-      toast.success("Image uploaded");
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      toast.error(`Failed to upload image: ${err.message || "Unknown error"}`);
+      const msg = (err as { message?: string })?.message || "Unknown error";
+      toast.error(`Failed to upload image: ${msg}`);
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { storage, database } from "@/config/firebase";
-import { createClient } from "@supabase/supabase-js";
 import { ref as dbRef, update, get, onValue } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -19,7 +18,7 @@ const DashboardHeader = () => {
   type LowStockItem = { id: string; name?: string; sku?: string; stock?: number; reorderLevel?: number };
   const [lowStock, setLowStock] = useState<LowStockItem[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
-  const API_URL = import.meta.env.VITE_API_URL || '/api';
+  const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`;
   const navigate = useNavigate();
 
   const fetchLowStock = async () => {
@@ -96,8 +95,6 @@ const DashboardHeader = () => {
       setSaving(true);
       let avatarUrl: string | undefined;
       if (avatarFile) {
-        try { void 0 }
-        catch { void 0 }
         try {
           const ext = (avatarFile.type || 'image/jpeg').includes('png') ? 'png' : (avatarFile.type || '').includes('webp') ? 'webp' : 'jpg';
           const path = `profiles/${user.uid}.${ext}`;
@@ -105,27 +102,13 @@ const DashboardHeader = () => {
           fd.append('bucket', 'profile-images');
           fd.append('path', path);
           fd.append('file', avatarFile, avatarFile.name);
-          {
-            const lsUrl = localStorage.getItem('SUPABASE_URL') || localStorage.getItem('VITE_SUPABASE_URL') || import.meta.env.VITE_SUPABASE_URL || '';
-            const lsKey = localStorage.getItem('SUPABASE_ANON_KEY') || localStorage.getItem('VITE_SUPABASE_ANON_KEY') || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-            if (lsUrl && lsKey) {
-              const rt = createClient(lsUrl, lsKey);
-              const up2 = await rt.storage.from('profile-images').upload(path, avatarFile, { contentType: avatarFile.type || 'image/jpeg', upsert: true });
-              if (!up2.error) {
-                const pub = rt.storage.from('profile-images').getPublicUrl(path).data.publicUrl;
-                avatarUrl = pub || '';
-              }
+          try {
+            const up = await fetch(`${API_URL}/storage/upload`, { method: 'POST', body: fd });
+            const j = await up.json().catch(() => ({ success: false }));
+            if (j.success && j.url) {
+              avatarUrl = String(j.url);
             }
-          }
-          if (!avatarUrl) {
-            try {
-              const up = await fetch(`${API_URL}/storage/upload`, { method: 'POST', body: fd });
-              const j = await up.json().catch(() => ({ success: false }));
-              if (j.success && j.url) {
-                avatarUrl = String(j.url);
-              }
-            } catch { void 0 }
-          }
+          } catch { void 0 }
         } catch { void 0 }
         if (!avatarUrl && avatarPreview) {
           avatarUrl = avatarPreview;

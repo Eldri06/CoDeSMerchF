@@ -1,5 +1,5 @@
 <div align="center">
-# 🛍️ CoDeSMerch
+<h1>🛍️ CoDeSMerch</h1>
  
 **Merchandise management system for the Computer Development Society.**
  

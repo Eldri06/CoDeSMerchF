@@ -18,7 +18,7 @@ A full-stack web application built with React, Node.js, and Flask — featuring 
  
 ## 📖 About
  
-**CoDeSMerch** is a full-stack merchandise management system built for the **Computer Development Society (CoDES)**. It provides officers and admins with a centralized dashboard to manage merchandise inventory, process sales through a built-in POS, track revenue, manage events, and forecast future demand using machine learning — all in one place. Authentication is role-based, supporting roles such as Super Admin, President, Vice President, Officers, and more.
+**CoDeSMerch** is a full-stack merchandise management system built for the **Computer Development Society (CoDES)**. It provides officers and admins with a centralized dashboard to manage merchandise inventory, process sales through a built-in POS, track revenue, manage events, and forecast future demand using machine learning — all in one place. Authentication is role-based, supporting roles such as Super Admin, President, Vice President, Secretary, Officers, and more.
  
 ---
  

@@ -3,7 +3,7 @@
  
 **Merchandise management system for the Computer Development Society.**
  
-A full-stack web application built with React, Node.js, and Flask, featuring role-based dashboards, inventory management, point-of-sale, sales analytics, and ML-powered demand forecasting.
+A full-stack web application built with React, Node.js, and Flask, featuring role-based dashboards, inventory management, point-of-sale, sales analytics, and demand forecasting.
  
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)

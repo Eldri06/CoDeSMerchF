@@ -29,7 +29,7 @@ A full-stack web application built with React, Node.js, and Flask, featuring rol
 - Supported roles: Super Admin, President, Vice President, Officer, Secretary, Treasurer, PIO
 - Activity logging per user session
 **📦 Product Management**
-- Add, update, and delete merchandise products
+- Add, update, and delete merch products
 - Image uploads via Supabase Storage
 - Low stock alert monitoring
 **🧾 Point of Sale (POS)**
